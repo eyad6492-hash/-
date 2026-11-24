@@ -1,0 +1,4 @@
+# Copy to .dev.vars for local development (never commit .dev.vars).
+# Generate fresh values with: npm run gen:keys
+SETUP_TOKEN=change-me-to-a-long-random-string
+VAULT_KEY=base64-32-bytes-key

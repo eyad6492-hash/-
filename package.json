@@ -1,0 +1,18 @@
+{
+  "name": "media-buyer-control-center",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --local",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
+    "deploy": "wrangler d1 migrations apply DB --remote && wrangler deploy",
+    "test": "node tests/api.test.mjs",
+    "test:ui": "node tests/ui.test.mjs",
+    "gen:keys": "node scripts/gen-keys.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "4.167.0"
+  }
+}

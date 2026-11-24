@@ -1,0 +1,9 @@
+node_modules/
+.wrangler/
+.dev.vars
+.env
+*.local
+backups/
+*.mbcc-backup.json
+test-results/
+screenshots/

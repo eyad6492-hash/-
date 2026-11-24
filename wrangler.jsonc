@@ -1,0 +1,24 @@
+{
+  // Media Buyer Control Center — Cloudflare Workers config
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "media-buyer-control-center",
+  "main": "worker/index.js",
+  "compatibility_date": "2025-09-01",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": true,
+    "not_found_handling": "single-page-application"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "mbcc-db",
+      // Replace with your database id after: npx wrangler d1 create mbcc-db
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "observability": { "enabled": true }
+  // Secrets (never commit them): set with `npx wrangler secret put SETUP_TOKEN` and `npx wrangler secret put VAULT_KEY`
+}
