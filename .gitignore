@@ -7,3 +7,5 @@ backups/
 *.mbcc-backup.json
 test-results/
 screenshots/
+worker/.static/
+worker/static.gen.js

@@ -8,6 +8,7 @@ import { clientRoutes } from './routes/clients.js';
 import { workRoutes } from './routes/work.js';
 import { quoteVaultRoutes } from './routes/quotes_vault.js';
 import { systemRoutes } from './routes/system.js';
+import { serveStatic } from './static.js';
 
 const PUBLIC = new Set(['GET /api/auth/status', 'POST /api/auth/setup', 'POST /api/auth/login', 'POST /api/auth/logout', 'POST /api/auth/webauthn/login-options', 'POST /api/auth/webauthn/login']);
 
@@ -65,10 +66,9 @@ export default {
         // Digital Asset Links for the Android (TWA) build — configured via the ASSETLINKS_JSON variable.
         return new Response(env.ASSETLINKS_JSON || '[]', { headers: { 'content-type': 'application/json' } });
       }
-      const res = await env.ASSETS.fetch(req);
+      const res = serveStatic(req);
       const out = withHeaders(res);
-      if (url.pathname === '/sw.js' || url.pathname === '/' || url.pathname.endsWith('.html')) out.headers.set('cache-control', 'no-cache');
-      return out;
+            return out;
     } catch (e) {
       if (e instanceof HttpError) return withHeaders(json({ error: e.message, code: e.code }, e.status));
       console.error('Unhandled error:', e && e.stack ? e.stack.split('\n').slice(0, 3).join(' | ') : String(e));

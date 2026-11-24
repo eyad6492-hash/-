@@ -4,18 +4,14 @@
   "name": "media-buyer-control-center",
   "main": "worker/index.js",
   "compatibility_date": "2025-09-01",
-  "assets": {
-    "directory": "./public",
-    "binding": "ASSETS",
-    "run_worker_first": true,
-    "not_found_handling": "single-page-application"
-  },
+  // Static files are bundled into the Worker by scripts/embed-assets.mjs (npm run build)
+  "rules": [{ "type": "Data", "globs": ["**/*.bin"], "fallthrough": true }],
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "mbcc-db",
       // Replace with your database id after: npx wrangler d1 create mbcc-db
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "ae4a24e5-9be0-4ff3-8a51-188565012fb5",
       "migrations_dir": "migrations"
     }
   ],

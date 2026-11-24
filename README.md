@@ -54,8 +54,12 @@ npx wrangler d1 create mbcc-db                      # انسخ database_id ال�
 npm run gen:keys                                    # يطبع قيمتين — احفظهما في مكان آمن (مدير كلمات مرور)
 npx wrangler secret put SETUP_TOKEN                 # الصق قيمة SETUP_TOKEN
 npx wrangler secret put VAULT_KEY                   # الصق قيمة VAULT_KEY
-npm run deploy                                      # ينشئ الجداول وينشر التطبيق
+npm run deploy                                      # يجمّع ملفات الواجهة، ينشئ الجداول، وينشر التطبيق
 ```
+
+> ملفات الواجهة (`public/`) تُدمج داخل الـ Worker عبر `npm run build` (يُشغَّل تلقائيًا مع dev/deploy/test)، فالنشر رفعة واحدة.
+
+**النسخة المنشورة حاليًا:** https://media-buyer-control-center.media-buyer-control-center.workers.dev
 
 سيظهر رابط مثل `https://media-buyer-control-center.<اسمك>.workers.dev` — هذا رابط تطبيقك.
 

@@ -4,13 +4,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev --local",
+    "dev": "npm run build && wrangler dev --local",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
-    "deploy": "wrangler d1 migrations apply DB --remote && wrangler deploy",
-    "test": "node tests/api.test.mjs",
-    "test:ui": "node tests/ui.test.mjs",
-    "gen:keys": "node scripts/gen-keys.mjs"
+    "deploy": "npm run build && wrangler d1 migrations apply DB --remote && wrangler deploy",
+    "test": "npm run build && node tests/api.test.mjs",
+    "test:ui": "npm run build && node tests/ui.test.mjs",
+    "gen:keys": "node scripts/gen-keys.mjs",
+    "build": "node scripts/embed-assets.mjs"
   },
   "devDependencies": {
     "wrangler": "4.167.0"
