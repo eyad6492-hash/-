@@ -1,4 +1,4 @@
-import { html, raw, icon, mount, money, n, logo, date, empty, debounce, sheet, field, sel } from '../ui.js';
+import { html, raw, icon, mount, money, n, logo, date, dateShort, empty, debounce, sheet, field, sel } from '../ui.js';
 import { get, lookups } from '../api.js';
 import { can, setTitle, go } from '../app.js';
 import { CLIENT_STATUS, PLATFORMS } from '../shared.js';
@@ -14,7 +14,7 @@ export function clientRow(c, extra = '') {
     ${logo(c)}
     <div class="it-body"><div class="it-title">${c.name}</div>
       <div class="it-sub">${[c.store_name, c.business_type, (c.platforms || []).join(' / ')].filter(Boolean).join(' • ') || '—'}</div>
-      ${c.sub ? html`<div class="xs muted" style="margin-top:2px">${icon('calendar', 'sm')} ينتهي ${date(c.sub.end_date)}${c.sub.remaining > 0 ? html` • <span style="color:var(--gold)">متبقي ${money(c.sub.remaining, 0)}</span>` : ''}</div>` : ''}
+      <div class="xs muted" style="margin-top:2px">${c.tenure ? html`<span style="color:var(--cyan)">${icon('clock', 'sm')} ${c.tenure.label}</span>` : ''}${c.sub ? html`${c.tenure ? ' • ' : ''}${c.sub.open ? html`مفتوح${c.sub.next_due ? ` • الدفعة ${dateShort(c.sub.next_due)}` : ''}` : html`ينتهي ${date(c.sub.end_date)}`}${c.sub.remaining > 0 ? html` • <span style="color:var(--gold)">مستحق ${money(c.sub.remaining, 0)}</span>` : ''}` : ''}</div>
     </div>
     <div class="stack" style="gap:4px;justify-items:end">${statusBadge(c.status_display)}${extra}</div>
   </a>`;

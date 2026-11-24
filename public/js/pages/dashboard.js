@@ -55,6 +55,20 @@ export default async function dashboard(main, _p, _q, stale) {
       <div class="stack" style="gap:6px">${d.alerts.slice(0, 10).map((a) => html`<div class="alert-item" data-link="${a.link || (a.campaign_id ? `#/campaigns/${a.campaign_id}` : a.client_id ? `#/clients/${a.client_id}` : '#/')}"><span class="lv lv-${a.level}"></span><span class="grow">${a.text}</span>${icon('chevL', 'sm')}</div>`)}
       ${d.alerts.length > 10 ? html`<button class="btn sm ghost" data-more-alerts>عرض كل التنبيهات (${d.alerts.length})</button>` : ''}</div></div>` : ''}
 
+    <div class="section"><div class="section-head"><h3>المتابعة والدفعات والتجارب</h3></div>
+      <div class="tiles">
+        ${s.checklist_total !== undefined ? tile(`Checklist اليوم (${s.checklist_done}/${s.checklist_total})`, s.checklist_total ? Math.round((s.checklist_done / s.checklist_total) * 100) : 0, 'list', 't-teal', '#/checklist') : ''}
+        ${s.checklist_total !== undefined ? tile('لم تتم متابعتهم اليوم', s.checklist_pending, 'clock', 't-slate', '#/checklist') : ''}
+        ${s.checklist_total !== undefined ? tile('مكتملة متابعتهم اليوم', s.checklist_done, 'checkCircle', 't-green', '#/checklist') : ''}
+        ${s.checklist_total !== undefined ? tile('يحتاجون تدخلًا', s.checklist_attention, 'alert', 't-red', '#/checklist') : ''}
+        ${money_ok ? tile('الدفعات القادمة (7 أيام)', s.payments_upcoming, 'wallet', 't-gold', '#/payments/upcoming') : ''}
+        ${money_ok ? tile('الدفعات المتأخرة', s.payments_late, 'alert', 't-red', '#/payments/upcoming?f=late') : ''}
+        ${money_ok ? tile('عملاء لديهم تنبيه دفع', s.payment_alerts, 'bell', 't-orange', '#/payments/upcoming') : ''}
+        ${tile('عملاء التجارب', s.trials_active, 'sparkles', 't-cyan', '#/trials')}
+        ${tile('تجارب تنتهي قريبًا', s.trials_ending, 'clock', 't-violet', '#/trials?f=ending')}
+        ${tile('تجارب منتهية', s.trials_ended, 'archive', 't-indigo', '#/trials?f=ended')}
+      </div></div>
+
     <div class="section"><div class="section-head"><h3>مؤشرات الأعمال</h3></div>
       <div class="tiles">
         ${tile('العملاء المتوقفون', s.clients_stopped, 'pause', 't-slate', '#/clients?f=stopped')}

@@ -1,4 +1,4 @@
-import { DEFAULT_CHECKLIST, ROLES, PERMISSIONS, todayIn } from '../../public/js/shared.js';
+import { DEFAULT_CHECKLIST, DEFAULT_QUICK_CHECKLIST, ROLES, PERMISSIONS, todayIn } from '../../public/js/shared.js';
 import { HttpError, forbidden, newId, nowISO } from './util.js';
 import { sha256hex } from './crypto.js';
 
@@ -19,6 +19,9 @@ export const SETTINGS_DEFAULTS = {
   default_sub_months: 1, expiring_days: 7, payment_grace_days: 5,
   freeze_extend: true, freeze_pause_work: true,
   checklist: DEFAULT_CHECKLIST,
+  quick_checklist: DEFAULT_QUICK_CHECKLIST,
+  due_soon_days: 3,
+  default_pay_alert_days: 3,
   followup_default_every: 1,
   task_default_priority: 'medium',
   vault_lock_minutes: 10,

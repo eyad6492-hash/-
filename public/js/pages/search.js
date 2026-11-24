@@ -2,7 +2,7 @@ import { html, icon, mount, empty, debounce, logo } from '../ui.js';
 import { get } from '../api.js';
 import { setTitle } from '../app.js';
 
-const TYPE = { client: ['عميل', 'users', 'b-purple'], campaign: ['حملة', 'megaphone', 'b-pink'], task: ['مهمة', 'checkSquare', 'b-green'], report: ['تقرير', 'bars', 'b-cyan'], quote: ['عرض سعر', 'file', 'b-gold'] };
+const TYPE = { client: ['عميل', 'users', 'b-purple'], campaign: ['حملة', 'megaphone', 'b-pink'], task: ['مهمة', 'checkSquare', 'b-green'], report: ['تقرير', 'bars', 'b-cyan'], quote: ['عرض سعر', 'file', 'b-gold'], trial: ['تجربة', 'sparkles', 'b-cyan'] };
 
 export default async function searchPage(main, _p, q) {
   setTitle('البحث');

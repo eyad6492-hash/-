@@ -34,7 +34,7 @@ try {
   await page.goto(BASE + '/'); await page.waitForSelector('#login'); await wait(1500); await shot('01-login');
   await page.fill('[name=username]', 'owner'); await page.fill('[name=password]', 'owner-password-1'); await page.click('#login [type=submit]');
   await page.waitForSelector('.tiles'); await wait(1200); await shot('02-dashboard');
-  const routes = ['clients', 'clients/demo_c1', 'clients/demo_c1?tab=subscription', 'followup', 'followup?start=1', 'tasks', 'subscriptions', 'payments', 'campaigns', 'campaigns/demo_k1_0', 'reports', 'reports/new?client=demo_c1', 'quotes', 'quotes/new', 'calendar', 'archive', 'activity', 'vault', 'backup', 'settings', 'users', 'search?q=متجر', 'categories'];
+  const routes = ['clients', 'clients/demo_c1', 'clients/demo_c1?tab=subscription', 'followup', 'followup?start=1', 'tasks', 'subscriptions', 'payments', 'campaigns', 'campaigns/demo_k1_0', 'reports', 'reports/new?client=demo_c1', 'quotes', 'quotes/new', 'calendar', 'archive', 'activity', 'vault', 'backup', 'settings', 'users', 'search?q=متجر', 'categories', 'payments/upcoming', 'checklist', 'trials', 'trials/demo_tr2'];
   let i = 3;
   for (const r of routes) {
     await page.goto(`${BASE}/#/${r}`); await wait(900);
@@ -62,6 +62,28 @@ try {
   const pdfPath = `${OUT}/report.pdf`; await dl.saveAs(pdfPath);
   const head = fs.readFileSync(pdfPath).subarray(0, 5).toString(); if (head !== '%PDF-') errors.push('[pdf] not a PDF');
   console.log('PDF size', fs.statSync(pdfPath).size);
+  // v1.1: quick checklist ticks are saved
+  await page.goto(`${BASE}/#/checklist`); await wait(900);
+  const card = page.locator('[data-cid]').first();
+  const cid = await card.getAttribute('data-cid');
+  const boxes = card.locator('.ck');
+  const nBoxes = await boxes.count();
+  for (let k = 0; k < nBoxes; k++) { await boxes.nth(k).click(); await wait(150); }
+  await wait(600); await shot('96-checklist-ticked');
+  const st = await page.evaluate(async (id) => (await (await fetch('/api/checklist')).json()).clients.find((c) => c.id === id).check_status, cid);
+  if (st !== 'done') errors.push('[checklist] expected done, got ' + st);
+  // v1.1: convert a trial from the UI
+  await page.goto(`${BASE}/#/trials/demo_tr2`); await wait(900);
+  await page.click('[data-convert]'); await wait(400);
+  await page.fill('.sheet [name=monthly_amount]', '2500'); await page.fill('.sheet [name=pay_day]', '5'); await shot('97-convert-form');
+  await page.click('.sheet [data-submit]'); await page.waitForURL(/#\/clients\//, { timeout: 10000 }); await wait(900); await shot('98-converted-client');
+  const txt = await page.textContent('#main'); if (!txt.includes('مدة التعامل') && !txt.includes('معك منذ')) errors.push('[trial] tenure not shown on converted client');
+  // v1.1: record a payment from upcoming payments
+  await page.goto(`${BASE}/#/payments/upcoming?f=all`); await wait(900);
+  const payBtn = page.locator('[data-pay]').first();
+  if (await payBtn.count()) { await payBtn.click(); await wait(400); await page.click('.sheet [data-submit]'); await wait(900); }
+  else errors.push('[upcoming] no pay button');
+  await shot('99-upcoming-after-pay');
   // desktop layout
   const desk = await browser.newContext({ viewport: { width: 1366, height: 860 }, locale: 'ar-SA' });
   const dp = await desk.newPage(); dp.on('pageerror', (e) => errors.push(`[desktop] ${e.message}`));

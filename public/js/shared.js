@@ -116,3 +116,90 @@ export const ROLES = {
   finance: { label: 'موظف مالي', perms: ['clients.view', 'payments.view', 'payments.create', 'subscriptions.edit', 'quotes.view', 'quotes.create'] },
   custom: { label: 'صلاحيات مخصصة', perms: [] },
 };
+
+// ======================= v1.1: tenure, billing schedule, trials, checklist =======================
+export const OPEN_END = '9999-12-31'; // stored end_date for open (no-expiry) subscriptions
+export const SUB_TYPES = { fixed: 'محدد المدة', open: 'اشتراك مفتوح / مستمر' };
+export const BILLING_MODES = { advance: 'مقدّم (أول الشهر)', arrears: 'بعد انتهاء الشهر' };
+PAY_STATUS.soon = 'قريب الاستحقاق';
+export const TRIAL_STATUS = { active: 'تجربة نشطة', ending: 'تنتهي قريبًا', ended: 'انتهت التجربة', converted: 'تحولت إلى عميل', no_deal: 'لم يتم الاتفاق', stopped: 'متوقفة' };
+export const CHECK_STATUS = { done: 'مكتمل', progress: 'قيد المتابعة', none: 'لم يبدأ', attention: 'يحتاج تدخل' };
+export const DEFAULT_QUICK_CHECKLIST = [
+  ['acct', 'مراجعة الحساب الإعلاني', true], ['camps', 'مراجعة الحملات', true], ['spend', 'مراجعة المصروف', true], ['orders', 'مراجعة الطلبات', false],
+  ['sales', 'مراجعة المبيعات', false], ['roas', 'مراجعة ROAS', true], ['ads', 'مراجعة الإعلانات', false], ['budget', 'مراجعة الميزانية', false],
+  ['issue', 'متابعة أي مشكلة', false], ['action', 'اتخاذ الإجراء المطلوب', false],
+].map(([id, label, core]) => ({ id, label, core }));
+
+const arPlural = (n, one, two, few, many) => (n === 1 ? one : n === 2 ? two : n >= 3 && n <= 10 ? `${n} ${few}` : `${n} ${many}`);
+/** Time since `start` (YYYY-MM-DD) until `today`: years/months/days + Arabic label. */
+export function tenure(start, today) {
+  if (!start || start > today) return null;
+  const s = parseDate(start), t = parseDate(today);
+  let months = (t.getUTCFullYear() - s.getUTCFullYear()) * 12 + (t.getUTCMonth() - s.getUTCMonth());
+  if (t.getUTCDate() < s.getUTCDate()) months--;
+  const years = Math.floor(months / 12), rem = months % 12;
+  const days = diffDays(start, today);
+  const parts = [];
+  if (years) parts.push(arPlural(years, 'سنة', 'سنتان', 'سنوات', 'سنة'));
+  if (rem) parts.push(arPlural(rem, 'شهر', 'شهران', 'أشهر', 'شهرًا'));
+  const label = parts.length ? parts.join(' و') : arPlural(days || 0, 'يوم', 'يومان', 'أيام', 'يومًا').replace(/^0 يومًا$/, 'بدأ اليوم');
+  return { years, months: rem, total_months: months, days, label };
+}
+
+/** i-th due date of a monthly schedule starting at `first`, on `payDay` (clamped to month length). */
+export function nthDue(first, payDay, i) {
+  const f = parseDate(first);
+  const y = f.getUTCFullYear(), m = f.getUTCMonth() + i;
+  const last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  const day = Math.min(payDay || f.getUTCDate(), last);
+  return fmtISO(new Date(Date.UTC(y, m, day)));
+}
+export function defaultFirstDue(sub) {
+  if (sub.billing_mode === 'arrears') return addMonths(sub.start_date, 1);
+  if (sub.pay_day) { const d = nthDue(sub.start_date.slice(0, 8) + '01', sub.pay_day, 0); return d >= sub.start_date ? d : nthDue(sub.start_date.slice(0, 8) + '01', sub.pay_day, 1); }
+  return sub.start_date;
+}
+
+/**
+ * Billing state of a subscription given the total paid towards it.
+ * Monthly schedule when monthly_amount > 0 (always for open subscriptions); otherwise one payment.
+ * status: paid | soon | due | late | none ; partial = an installment is partly paid.
+ */
+export function computeBilling(sub, paid, today, { grace = 5, soonDays = 3 } = {}) {
+  if (!sub) return null;
+  const open = sub.sub_type === 'open';
+  const monthly = num(open ? sub.monthly_amount ?? sub.amount : sub.monthly_amount) || 0;
+  const out = { monthly: monthly || null, paid, next_due: null, amount_due: 0, owed_now: 0, periods_due: 0, partial: false, status: 'none', days_to_due: null };
+  if (monthly > 0) {
+    const first = sub.first_due_date || defaultFirstDue(sub);
+    const payDay = sub.pay_day || parseDate(first).getUTCDate();
+    const end = open ? null : sub.end_date;
+    let total = Infinity;
+    if (end) { total = 0; while (total < 600 && nthDue(first, payDay, total) <= end) total++; total = Math.max(total, 1); }
+    let elapsed = 0; while (elapsed < total && elapsed < 600 && nthDue(first, payDay, elapsed) <= today) elapsed++;
+    const covered = Math.floor((paid + 0.009) / monthly);
+    const remainder = round2(paid - covered * monthly);
+    out.periods_due = Math.max(elapsed - covered, 0);
+    out.owed_now = round2(Math.max(elapsed * monthly - paid, 0));
+    out.partial = remainder > 0.009;
+    out.first_due = first; out.pay_day = payDay;
+    if (covered < total) { out.next_index = covered; out.next_due = nthDue(first, payDay, covered); out.amount_due = round2(monthly - remainder); }
+  } else {
+    const amount = num(sub.amount) || 0;
+    if (amount <= 0) return out;
+    const due = sub.first_due_date || sub.start_date;
+    if (paid + 0.009 < amount) { out.next_due = due; out.amount_due = round2(amount - paid); out.owed_now = due <= today ? out.amount_due : 0; out.periods_due = due <= today ? 1 : 0; }
+    out.partial = paid > 0 && paid + 0.009 < amount;
+  }
+  if (!out.next_due) { out.status = 'paid'; return out; }
+  out.days_to_due = diffDays(today, out.next_due);
+  out.status = out.days_to_due < -grace ? 'late' : out.days_to_due <= 0 ? 'due' : out.days_to_due <= soonDays ? 'soon' : 'paid';
+  return out;
+}
+
+export function trialState(t, today) {
+  if (t.status !== 'active') return t.status;
+  if (t.end_date < today) return 'ended';
+  if (diffDays(today, t.end_date) <= (t.alert_days ?? 1)) return 'ending';
+  return 'active';
+}

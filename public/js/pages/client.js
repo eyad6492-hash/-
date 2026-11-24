@@ -1,7 +1,7 @@
 import { html, raw, icon, mount, money, moneyText, n, logo, date, dateShort, dateTime, empty, toast, sheet, confirmBox, copyText, kpi, relDays } from '../ui.js';
 import { get, post, del, put, invalidate, lookups } from '../api.js';
 import { can, setTitle, go, refresh, state } from '../app.js';
-import { SUB_STATUS, PAY_STATUS, PAY_METHODS, PAY_TYPES, CAMPAIGN_STATUS, TASK_PRIORITY, TASK_STATUS, RATINGS, QUOTE_STATUS, computeMetrics } from '../shared.js';
+import { SUB_TYPES, BILLING_MODES, SUB_STATUS, PAY_STATUS, PAY_METHODS, PAY_TYPES, CAMPAIGN_STATUS, TASK_PRIORITY, TASK_STATUS, RATINGS, QUOTE_STATUS, computeMetrics } from '../shared.js';
 import * as F from '../forms.js';
 import { statusBadge } from './clients.js';
 
@@ -10,7 +10,7 @@ export const waLink = (phone, text = '') => {
   if (p.startsWith('00')) p = p.slice(2); else if (p.startsWith('05')) p = '966' + p.slice(1); else if (p.startsWith('5') && p.length === 9) p = '966' + p;
   return `https://wa.me/${p}${text ? '?text=' + encodeURIComponent(text) : ''}`;
 };
-const PAY_BADGE = { paid: 'b-green', partial: 'b-gold', unpaid: 'b-red', late: 'b-red', due: 'b-blue', none: 'b-gray' };
+const PAY_BADGE = { paid: 'b-green', partial: 'b-gold', unpaid: 'b-red', late: 'b-red', due: 'b-pink', soon: 'b-gold', none: 'b-gray' };
 const SUB_BADGE = { active: 'b-green', expiring: 'b-gold', expired: 'b-red', frozen: 'b-blue', stopped: 'b-gray', pending_renewal: 'b-purple', ended: 'b-gray' };
 const CAMP_BADGE = { active: 'b-green', stopped: 'b-gray', review: 'b-blue', optimize: 'b-gold', rejected: 'b-red', ended: 'b-gray', paused: 'b-purple' };
 const PRIO_BADGE = { low: 'b-gray', medium: 'b-blue', high: 'b-gold', urgent: 'b-red' };
@@ -40,6 +40,7 @@ export default async function clientPage(main, { id }, q, stale) {
         ${logo(c, 'lg')}
         <div class="grow"><h2 style="margin:0;font-size:20px;font-weight:800">${c.name}</h2>
           <div class="muted small">${[c.store_name, c.business_type].filter(Boolean).join(' • ') || '—'}</div>
+          ${c.tenure ? html`<div class="small" style="color:var(--cyan);margin-top:2px">${icon('clock', 'sm')} معك منذ ${c.tenure.label}</div>` : ''}
           <div class="row wrap" style="gap:6px;margin-top:6px">${statusBadge(c.status_display)}${c.flags.filter((f) => f !== c.status_display).slice(0, 3).map((f) => statusBadge(f))}${c.tags.map((t) => html`<span class="badge b-purple">#${t}</span>`)}</div></div>
         <button class="icon-btn" data-menu aria-label="خيارات">${icon('more')}</button>
       </div>
@@ -59,13 +60,18 @@ export default async function clientPage(main, { id }, q, stale) {
 
   const panels = {
     summary: () => html`
+      ${c.tenure || c.start_date ? html`<div class="card" style="margin-bottom:12px;padding:14px;background:linear-gradient(135deg,rgba(34,211,238,.12),rgba(124,92,255,.12))">
+        <div class="row"><span class="kv-ic qc-cyan" style="width:42px;height:42px;border-radius:12px;display:grid;place-items:center">${icon('clock')}</span>
+          <div class="grow"><div class="xs muted">العميل منذ ${date(c.start_date)}</div><div class="bold" style="font-size:18px">مدة التعامل: ${c.tenure ? c.tenure.label : 'يبدأ ' + date(c.start_date)}</div>
+          ${c.tenure ? html`<div class="xs muted"><span class="num">${c.tenure.total_months}</span> شهر • <span class="num">${n(c.tenure.days, 0)}</span> يوم حتى اليوم</div>` : ''}</div></div></div>` : ''}
+      ${s && can('payments.view') ? billingCard() : ''}
       <div class="grid-2">
         ${kv('تاريخ الاشتراك', s ? date(s.start_date) : '—', 'calendar', 'qc-purple')}
-        ${kv('تاريخ الانتهاء', s ? html`${date(s.end_date)}<div class="xs muted">${s.days_left >= 0 ? `متبقي ${s.days_left} يوم` : `منتهي منذ ${-s.days_left} يوم`}</div>` : '—', 'calendar', 'qc-pink')}
-        ${can('payments.view') ? kv('قيمة الاشتراك', s ? money(s.amount) : '—', 'receipt', 'qc-blue') : ''}
+        ${kv('تاريخ الانتهاء', s ? (s.open ? html`بدون انتهاء<div class="xs muted">اشتراك مفتوح / مستمر</div>` : html`${date(s.end_date)}<div class="xs muted">${s.days_left >= 0 ? `متبقي ${s.days_left} يوم` : `منتهي منذ ${-s.days_left} يوم`}</div>`) : '—', 'calendar', 'qc-pink')}
+        ${can('payments.view') ? kv(s?.billing?.monthly ? 'قيمة الاشتراك الشهرية' : 'قيمة الاشتراك', s ? money(s.billing?.monthly || s.amount) : '—', 'receipt', 'qc-blue') : ''}
         ${s ? kv('حالة الاشتراك', html`<span class="badge ${SUB_BADGE[s.state] || 'b-gray'}" style="font-size:14px">${SUB_STATUS[s.state] || s.state}</span>`, 'subs', 'qc-cyan') : ''}
         ${can('payments.view') ? kv('المدفوع', s ? money(s.paid) : '—', 'coins', 'qc-green') : ''}
-        ${can('payments.view') ? kv('المتبقي', s ? money(s.remaining) : '—', 'wallet', 'qc-red') : ''}
+        ${can('payments.view') ? kv(s?.billing?.monthly ? 'المستحق حاليًا' : 'المتبقي', s ? money(s.remaining) : '—', 'wallet', 'qc-red') : ''}
         ${can('payments.view') && s ? kv('حالة الدفع', html`<span class="badge ${PAY_BADGE[s.pay_status]}" style="font-size:14px">${PAY_STATUS[s.pay_status]}</span>`, 'alert', 'qc-gold', s.pay_status === 'partial' || s.pay_status === 'late' ? 'warn' : '') : ''}
         ${kv('الميزانية اليومية', c.daily_budget ? money(c.daily_budget) : '—', 'target', 'qc-orange')}
         ${kv('الحملات النشطة', n(c.campaigns_active), 'megaphone', 'qc-purple')}
@@ -86,14 +92,20 @@ export default async function clientPage(main, { id }, q, stale) {
         ${qaBtn('copy', 'copy', 'qc-blue', 'نسخ البيانات')}
         ${qaBtn('links', 'link', 'qc-purple', 'فتح الروابط')}
         ${qaBtn('vault', 'key', 'qc-red', 'بيانات الحسابات', 'vault.view')}
+        ${qaBtn('alert', 'bell', c.pay_alert_enabled ? 'qc-green' : 'qc-orange', c.pay_alert_enabled ? `تنبيه الدفع (${c.pay_alert_days} أيام)` : 'تنبيه الدفع', 'clients.edit')}
       </div></div>`,
 
     info: () => html`<div class="card"><div class="kvlist">
       ${[['اسم العميل', c.name], ['المتجر / النشاط', c.store_name], ['نوع النشاط', c.business_type], ['الجوال', c.phone ? html`<a class="num" href="tel:${c.phone}">${c.phone}</a>` : null], ['البريد', c.email],
-        ['التصنيفات', c.category_names || null], ['المنصات', c.platforms.join('، ')], ['بداية التعامل', c.start_date ? date(c.start_date) : null], ['الميزانية اليومية', c.daily_budget ? money(c.daily_budget) : null],
+        ['التصنيفات', c.category_names || null], ['المنصات', c.platforms.join('، ')], ['بداية العمل الفعلي', c.start_date ? date(c.start_date) : null], ['مدة التعامل', c.tenure ? `${c.tenure.label} (${n(c.tenure.days, 0)} يوم)` : null], ['تنبيه الدفع', c.pay_alert_enabled ? `مفعّل — قبل ${c.pay_alert_days} أيام` : 'غير مفعّل'], ['الميزانية اليومية', c.daily_budget ? money(c.daily_budget) : null],
         ['المراجعة كل', `${c.followup_every} يوم`], ['موعد التواصل القادم', c.next_contact_date ? date(c.next_contact_date) : null], ['تاريخ الإضافة', dateTime(c.created_at)],
         ...c.custom_fields.map((x) => [x.label, x.value])].map(([k, v]) => html`<div><span>${k}</span><span>${v || '—'}</span></div>`)}
-      </div>${can('clients.edit') ? html`<button class="btn block ghost" style="margin-top:12px" data-act="edit">${icon('edit')} تعديل البيانات</button>` : ''}</div>`,
+      </div>${can('clients.edit') ? html`<button class="btn block ghost" style="margin-top:12px" data-act="edit">${icon('edit')} تعديل البيانات</button>` : ''}</div>
+      ${d.trial ? html`<div class="card"><div class="section-head"><h3>${icon('sparkles', 'sm')} بدأ كعميل تجربة</h3><a href="#/trials/${d.trial.id}">عرض التجربة</a></div><div class="kvlist">
+        <div><span>فترة التجربة</span><span>${date(d.trial.start_date)} ← ${date(d.trial.end_date)} (${d.trial.days} أيام)</span></div>
+        <div><span>الميزانية اليومية / الإجمالية</span><span>${money(d.trial.daily_budget)} / ${money(d.trial.total_budget)}</span></div>
+        ${d.trial.actual_spend != null ? html`<div><span>المصروف الفعلي</span><span>${money(d.trial.actual_spend)}</span></div>` : ''}
+        <div><span>تحوّل إلى عميل</span><span>${dateTime(d.trial.converted_at)}</span></div>${d.trial.notes ? html`<div><span>ملاحظات التجربة</span><span>${d.trial.notes}</span></div>` : ''}</div></div>` : ''}`,
 
     campaigns: () => html`${can('campaigns.edit') ? html`<button class="btn primary block" data-act="campaign">${icon('plus')} إضافة حملة</button>` : ''}
       <div class="list" style="margin-top:10px">${d.campaigns?.length ? d.campaigns.map((k) => { const m = computeMetrics(k); return html`<a class="item" href="#/campaigns/${k.id}"><span class="logo sm" style="background:var(--surface-2);color:var(--pink)">${icon('megaphone', 'sm')}</span><div class="it-body"><div class="it-title">${k.name}</div><div class="it-sub">${k.platform} • مصروف ${n(k.spend)} • ROAS ${kpi.roas(m.roas)} • CPA ${kpi.cpa(m.cpa)}</div></div><span class="badge ${CAMP_BADGE[k.status]}">${CAMPAIGN_STATUS[k.status]}</span></a>`; }) : empty('لا توجد حملات', 'megaphone')}</div>`,
@@ -113,9 +125,11 @@ export default async function clientPage(main, { id }, q, stale) {
     subscription: () => html`
       ${s ? html`<div class="card"><div class="row between"><h3 style="margin:0">الاشتراك الحالي</h3><span class="badge ${SUB_BADGE[s.state]}">${SUB_STATUS[s.state]}</span></div>
         <div class="kvlist" style="margin-top:8px">
-          <div><span>الفترة</span><span>${date(s.start_date)} ← ${date(s.end_date)}</span></div>
-          <div><span>الأيام المتبقية</span><span>${s.days_left >= 0 ? `${s.days_left} يوم` : `منتهي منذ ${-s.days_left} يوم`}</span></div>
-          <div><span>المدة</span><span>${n(s.duration_months)} شهر</span></div>
+          <div><span>نوع الاشتراك</span><span>${SUB_TYPES[s.sub_type] || SUB_TYPES.fixed}</span></div>
+          <div><span>الفترة</span><span>${date(s.start_date)} ← ${s.open ? 'مستمر بلا انتهاء' : date(s.end_date)}</span></div>
+          ${s.open ? '' : html`<div><span>الأيام المتبقية</span><span>${s.days_left >= 0 ? `${s.days_left} يوم` : `منتهي منذ ${-s.days_left} يوم`}</span></div><div><span>المدة</span><span>${n(s.duration_months)} شهر</span></div>`}
+          ${s.billing?.monthly ? html`<div><span>القيمة الشهرية</span><span>${money(s.billing.monthly)}</span></div><div><span>يوم الدفع الشهري</span><span>${s.billing.pay_day} من كل شهر</span></div><div><span>طريقة الدفع</span><span>${BILLING_MODES[s.billing_mode] || BILLING_MODES.advance}</span></div>` : ''}
+          ${s.next_due ? html`<div><span>موعد الدفعة القادمة</span><span>${date(s.next_due)} <span class="badge ${PAY_BADGE[s.pay_status]}">${PAY_STATUS[s.pay_status]}</span></span></div>` : ''}
           ${can('payments.view') ? html`<div><span>القيمة</span><span>${money(s.amount)}</span></div><div><span>المدفوع / المتبقي</span><span>${money(s.paid)} / ${money(s.remaining)}</span></div>` : ''}
           <div><span>ميزانية الإعلانات</span><span>${s.ad_budget ? money(s.ad_budget) : '—'}</span></div>
           <div><span>الخدمات</span><span>${s.services || '—'}</span></div><div><span>المنصات</span><span>${s.platforms.join('، ') || '—'}</span></div>
@@ -128,8 +142,8 @@ export default async function clientPage(main, { id }, q, stale) {
       <div class="card"><div class="section-head"><h3>${icon('snow', 'sm')} سجل التجميد</h3><span class="muted small">${d.freezes.length}</span></div>
         <div class="stack">${d.freezes.length ? d.freezes.map((f) => html`<div class="card flat" style="padding:10px"><div class="row between"><b>${date(f.start_date)} ← ${f.end_date ? date(f.end_date) : html`<span class="badge b-blue">مجمد حاليًا</span>`}</b>${f.actual_days !== null ? html`<span class="badge b-cyan">${f.actual_days} يوم</span>` : ''}</div>
           <div class="small muted">${f.reason || 'بدون سبب'}${f.expected_days ? ` • متوقع ${f.expected_days} يوم` : ''}</div>
-          ${f.end_after ? html`<div class="xs">نهاية الاشتراك: ${date(f.end_before)} ← <b>${date(f.end_after)}</b></div>` : ''}${f.notes ? html`<div class="xs muted">${f.notes}</div>` : ''}</div>`) : html`<p class="muted small" style="margin:0">لم يتم تجميد الاشتراك من قبل.</p>`}</div></div>
-      <div class="card"><div class="section-head"><h3>الاشتراكات السابقة</h3></div><div class="stack">${d.subscriptions.filter((x) => !x.is_current).map((x) => html`<div class="row small" style="padding:6px 0;border-bottom:1px solid var(--border)"><span class="grow">${date(x.start_date)} ← ${date(x.end_date)}</span>${can('payments.view') ? html`<span>${money(x.amount)}</span>` : ''}<span class="badge ${PAY_BADGE[x.pay_status]}">${PAY_STATUS[x.pay_status]}</span></div>`)}${d.subscriptions.filter((x) => !x.is_current).length ? '' : html`<p class="muted small" style="margin:0">لا يوجد</p>`}</div></div>`,
+          ${f.end_after && f.end_after !== '9999-12-31' ? html`<div class="xs">نهاية الاشتراك: ${date(f.end_before)} ← <b>${date(f.end_after)}</b></div>` : f.end_after ? html`<div class="xs">اشتراك مفتوح — تمت إزاحة مواعيد الدفع ${f.actual_days} يوم</div>` : ''}${f.notes ? html`<div class="xs muted">${f.notes}</div>` : ''}</div>`) : html`<p class="muted small" style="margin:0">لم يتم تجميد الاشتراك من قبل.</p>`}</div></div>
+      <div class="card"><div class="section-head"><h3>الاشتراكات السابقة</h3></div><div class="stack">${d.subscriptions.filter((x) => !x.is_current).map((x) => html`<div class="row small" style="padding:6px 0;border-bottom:1px solid var(--border)"><span class="grow">${date(x.start_date)} ← ${x.open ? 'مفتوح' : date(x.end_date)}</span>${can('payments.view') ? html`<span>${money(x.amount)}</span>` : ''}<span class="badge ${PAY_BADGE[x.pay_status]}">${PAY_STATUS[x.pay_status]}</span></div>`)}${d.subscriptions.filter((x) => !x.is_current).length ? '' : html`<p class="muted small" style="margin:0">لا يوجد</p>`}</div></div>`,
 
     payments: () => html`${can('payments.create') ? html`<button class="btn primary block" data-act="payment">${icon('coins')} تسجيل دفعة</button>` : ''}
       ${s ? html`<div class="grid-3" style="margin-top:10px">${kv('الإجمالي', money(s.amount, 0), 'receipt', 'qc-blue')}${kv('المدفوع', money(s.paid, 0), 'coins', 'qc-green')}${kv('المتبقي', money(s.remaining, 0), 'wallet', 'qc-red')}</div>` : ''}
@@ -146,6 +160,20 @@ export default async function clientPage(main, { id }, q, stale) {
     activity: () => html`<div class="list">${d.activity?.length ? d.activity.map((a) => html`<div class="item" style="cursor:default"><span class="logo sm" style="background:var(--surface-2);color:var(--muted)">${icon('history', 'sm')}</span><div class="it-body"><div class="it-title">${a.action}</div><div class="it-sub">${dateTime(a.created_at)} • ${a.user_name}${a.details ? ' • ' + a.details : ''}</div></div></div>`) : empty('لا يوجد نشاط', 'history')}</div>`,
   };
 
+  function billingCard() {
+    const b = s.billing || {};
+    const st = s.pay_status;
+    return html`<div class="card" style="margin-bottom:12px;padding:14px;${st === 'late' ? 'border-color:rgba(244,63,94,.5)' : st === 'due' || st === 'soon' ? 'border-color:rgba(245,181,68,.45)' : ''}">
+      <div class="row between"><b>${icon('coins', 'sm')} الدفع ${b.monthly ? 'الشهري' : ''}</b><span class="badge ${PAY_BADGE[st]}" style="font-size:13px">${PAY_STATUS[st]}${s.partial ? ' • جزئي' : ''}</span></div>
+      <div class="grid-2" style="margin-top:10px">
+        <div><div class="xs muted">الدفعة القادمة</div><div class="bold">${s.next_due ? date(s.next_due) : '—'}</div>${s.next_due ? html`<div class="xs" style="color:${s.days_to_due < 0 ? '#fb7185' : 'var(--muted)'}">${relDays(s.days_to_due)}</div>` : ''}</div>
+        <div><div class="xs muted">المبلغ</div><div class="bold">${s.next_due ? money(s.amount_due) : '—'}</div>${b.periods_due > 1 ? html`<div class="xs" style="color:#fb7185">${b.periods_due} دفعات متأخرة</div>` : ''}</div>
+        <div><div class="xs muted">آخر دفعة</div><div class="bold">${lastPayment ? date(lastPayment.date) : '—'}</div></div>
+        <div><div class="xs muted">${b.monthly ? 'يوم الدفع' : 'نوع الدفع'}</div><div class="bold">${b.monthly ? `${b.pay_day} من كل شهر` : 'دفعة واحدة'}</div></div>
+      </div>
+      <div class="row" style="margin-top:10px;gap:8px">${can('payments.create') && s.next_due ? html`<button class="btn sm success grow" data-act="payment">${icon('coins', 'sm')} تسجيل الدفعة</button>` : ''}
+        ${can('clients.edit') ? html`<button class="btn sm ghost grow" data-act="alert">${icon('bell', 'sm')} ${c.pay_alert_enabled ? `التنبيه قبل ${c.pay_alert_days} أيام` : 'تفعيل التنبيه'}</button>` : ''}</div></div>`;
+  }
   function linksList() {
     const links = [['رابط المتجر', c.store_url, 'store'], ['حساب TikTok', c.tiktok_url, 'globe'], ['TikTok Ads', c.tiktok_ads_url, 'megaphone'], ...c.other_links.map((l) => [l.label, l.url, 'link'])].filter((l) => l[1]);
     return links.length ? links.map(([l, u, ic]) => html`<a class="item" target="_blank" rel="noopener noreferrer" href="${u}">${icon(ic)}<div class="it-body"><div class="it-title">${l}</div><div class="it-sub ltr" style="text-align:right">${u}</div></div>${icon('chevL', 'sm')}</a>`) : html`<p class="muted small" style="margin:0">لا توجد روابط — أضفها من تعديل بيانات العميل.</p>`;
@@ -162,7 +190,8 @@ export default async function clientPage(main, { id }, q, stale) {
     notes: async () => after(await F.noteForm(c)),
     links: () => sheet({ title: 'روابط حسابات العميل', body: html`<div class="stack">${linksList()}</div>` }),
     copy: copyClient,
-    payment: async () => after(await F.paymentForm({ client_id: c.id, remaining: s?.remaining })),
+    payment: async () => after(await F.paymentForm({ client_id: c.id, remaining: s?.remaining, amount_due: s?.amount_due, next_due: s?.next_due })),
+    alert: async () => after(await F.alertForm(c)),
     freeze: async () => after(await F.freezeForm(c)),
     unfreeze: async () => after(await F.unfreezeForm(c)),
     renew: async () => after(await F.subscriptionForm({ client: c, sub: s, renew: true })),

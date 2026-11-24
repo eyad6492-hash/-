@@ -237,6 +237,143 @@ async function main() {
     const r = ok(await owner('POST', `/api/vault/${vaultId}/reveal`, {}), 'reveal'); assert.equal(r.secret.password, 'S3cret!Pass');
   });
 
+  console.log('\nv1.1 — مدة التعامل والاشتراك المفتوح والدفع الشهري');
+  const iso = (d) => d.toISOString().slice(0, 10);
+  const addD = (s0, n) => iso(new Date(Date.parse(s0) + n * 864e5));
+  let openId;
+  await test('حساب مدة التعامل (15 يناير 2025)', async () => {
+    const { tenure } = await import('../public/js/shared.js');
+    const t = tenure('2025-01-15', '2026-11-24'); assert.equal(t.label, 'سنة و10 أشهر'); assert.equal(t.total_months, 22); assert.equal(t.days, 678);
+    assert.equal(tenure('2024-11-24', '2026-11-24').label, 'سنتان'); assert.equal(tenure('2026-11-30', '2026-11-24'), null);
+    openId = ok(await owner('POST', '/api/clients', { name: 'عميل مفتوح', phone: '0501234567', start_date: '2025-01-15', pay_alert_enabled: true, pay_alert_days: 5,
+      subscription: { sub_type: 'open', monthly_amount: 1000, pay_day: Number(addD(today, 3).slice(8)), first_due_date: addD(today, 3) } }), 'open').id;
+    const d = ok(await owner('GET', `/api/clients/${openId}`), 'g');
+    assert.equal(d.client.tenure.total_months >= 22, true); assert.ok(d.client.tenure.label);
+  });
+  await test('الاشتراك المفتوح لا ينتهي ولا يُعتبر منتهيًا', async () => {
+    const d = ok(await owner('GET', `/api/clients/${openId}`), 'g');
+    assert.equal(d.client.sub.open, true); assert.equal(d.client.sub.end_date, null); assert.equal(d.client.sub.days_left, null);
+    assert.ok(!d.client.flags.includes('expired') && !d.client.flags.includes('expiring'));
+  });
+  await test('موعد الدفعة القادمة وحالة «قريب الاستحقاق» والتنبيه المخصص', async () => {
+    const d = ok(await owner('GET', `/api/clients/${openId}`), 'g');
+    assert.equal(d.client.sub.next_due, addD(today, 3)); assert.equal(d.client.sub.pay_status, 'soon'); assert.equal(d.client.sub.pay_alert, true); assert.equal(d.client.sub.amount_due, 1000);
+    const dash = ok(await owner('GET', '/api/dashboard'), 'd'); assert.ok(dash.alerts.some((a) => a.type === 'pay_alert' && a.client_id === openId));
+  });
+  await test('تسجيل دفعة يحدّث الموعد القادم تلقائيًا (+شهر) والدفع الجزئي', async () => {
+    ok(await owner('POST', `/api/clients/${openId}/payments`, { amount: 400 }), 'p1');
+    let d = ok(await owner('GET', `/api/clients/${openId}`), 'g'); assert.equal(d.client.sub.partial, true); assert.equal(d.client.sub.amount_due, 600); assert.equal(d.client.sub.next_due, addD(today, 3));
+    ok(await owner('POST', `/api/clients/${openId}/payments`, { amount: 600 }), 'p2');
+    d = ok(await owner('GET', `/api/clients/${openId}`), 'g');
+    const { nthDue } = await import('../public/js/shared.js');
+    assert.equal(d.client.sub.next_due, nthDue(addD(today, 3), Number(addD(today, 3).slice(8)), 1)); assert.equal(d.client.sub.pay_status, 'paid'); assert.equal(d.client.sub.pay_alert, false);
+  });
+  await test('حالة «متأخر» عند تجاوز موعد الدفع', async () => {
+    const id = ok(await owner('POST', '/api/clients', { name: 'متأخر شهري', subscription: { sub_type: 'open', monthly_amount: 500, start_date: addD(today, -70), first_due_date: addD(today, -40) } }), 'c').id;
+    const d = ok(await owner('GET', `/api/clients/${id}`), 'g'); assert.equal(d.client.sub.pay_status, 'late'); assert.equal(d.client.sub.remaining, 1000); assert.equal(d.client.sub.billing.periods_due, 2);
+  });
+  await test('اشتراك محدد المدة بدفع شهري', async () => {
+    const { computeBilling } = await import('../public/js/shared.js');
+    const b = computeBilling({ sub_type: 'fixed', start_date: '2026-01-01', end_date: '2026-03-31', monthly_amount: 1000, amount: 3000, pay_day: 1 }, 3000, '2026-02-15');
+    assert.equal(b.next_due, null); assert.equal(b.status, 'paid');
+    const b2 = computeBilling({ sub_type: 'fixed', start_date: '2026-01-01', end_date: '2026-03-31', monthly_amount: 1000, amount: 3000, pay_day: 1 }, 1000, '2026-02-15', { grace: 5 });
+    assert.equal(b2.next_due, '2026-02-01'); assert.equal(b2.status, 'late');
+  });
+  await test('صفحة الدفعات القادمة مرتبة حسب التاريخ', async () => {
+    const r = ok(await owner('GET', '/api/payments/upcoming'), 'u');
+    const dates = r.items.filter((x) => x.next_due).map((x) => x.next_due); assert.deepEqual(dates, [...dates].sort());
+    const row = r.items.find((x) => x.client_id === openId); assert.ok(row && row.phone === '0501234567' && row.monthly === 1000);
+  });
+  await test('فك التجميد يزيح مواعيد الدفع الشهرية بمدة التجميد', async () => {
+    const before = ok(await owner('GET', `/api/clients/${openId}`), 'g').client.sub.next_due;
+    ok(await owner('POST', `/api/clients/${openId}/freeze`, { start_date: addD(today, -6) }), 'f');
+    ok(await owner('POST', `/api/clients/${openId}/unfreeze`, { end_date: today }), 'u');
+    const after = ok(await owner('GET', `/api/clients/${openId}`), 'g').client.sub.next_due;
+    assert.equal(after, addD(before, 6));
+  });
+  await test('تعطيل التنبيه وتعديل موعد الدفع لكل عميل', async () => {
+    ok(await owner('PUT', `/api/clients/${openId}`, { pay_alert_enabled: false }), 'p');
+    const d = ok(await owner('GET', `/api/clients/${openId}`), 'g'); assert.equal(d.client.pay_alert_enabled, false);
+    ok(await owner('PUT', `/api/subscriptions/${d.client.sub.id}`, { pay_day: 10 }), 's');
+    const d2 = ok(await owner('GET', `/api/clients/${openId}`), 'g'); assert.equal(d2.client.sub.pay_day, 10); assert.equal(d2.client.sub.next_due.slice(8), '10');
+  });
+
+  console.log('\nv1.1 — Checklist المتابعة السريعة');
+  await test('حفظ علامات الصح وحالة الإنجاز', async () => {
+    const r = ok(await owner('GET', '/api/checklist'), 'c'); assert.ok(r.items.length >= 5); assert.ok(r.clients.some((c) => c.id === openId));
+    const core = r.items.filter((i) => i.core).map((i) => i.id);
+    let x = ok(await owner('PUT', `/api/checklist/${today}/${openId}`, { items: { [core[0]]: true } }), 'p'); assert.equal(x.check_status, 'progress');
+    x = ok(await owner('PUT', `/api/checklist/${today}/${openId}`, { items: Object.fromEntries(core.map((k) => [k, true])) }), 'p'); assert.equal(x.check_status, 'done');
+    const r2 = ok(await owner('GET', '/api/checklist'), 'c'); assert.equal(r2.clients.find((c) => c.id === openId).check_status, 'done');
+    x = ok(await owner('PUT', `/api/checklist/${today}/${openId}`, { items: {}, needs_attention: true }), 'p'); assert.equal(x.check_status, 'attention');
+  });
+  await test('سجل الأيام السابقة محفوظ ويوم جديد يبدأ فارغًا', async () => {
+    const y = addD(today, -1);
+    ok(await owner('PUT', `/api/checklist/${y}/${openId}`, { items: { acct: true } }), 'y');
+    const past = ok(await owner('GET', `/api/checklist?date=${y}`), 'past'); assert.equal(past.clients.find((c) => c.id === openId).entry.items.acct, true);
+    const h = ok(await owner('GET', '/api/checklist/history'), 'h'); assert.ok(h.days.some((d) => d.date === y) && h.days.some((d) => d.date === today));
+    assert.equal((await owner('PUT', `/api/checklist/${addD(today, 1)}/${openId}`, { items: {} })).status, 400);
+  });
+
+  console.log('\nv1.1 — عملاء التجارب');
+  let trialId;
+  await test('إضافة تجربة وحساب تاريخ النهاية والميزانية', async () => {
+    trialId = ok(await owner('POST', '/api/trials', { name: 'تجربة متجر', phone: '0555555555', start_date: today, days: 3, daily_budget: 100, platforms: ['TikTok'], alert_days: 1 }), 't').id;
+    const t = ok(await owner('GET', `/api/trials/${trialId}`), 'g').trial; assert.equal(t.end_date, addD(today, 2)); assert.equal(t.total_budget, 300); assert.equal(t.state, 'active');
+  });
+  await test('حالات التجربة: تنتهي قريبًا / انتهت', async () => {
+    const e = ok(await owner('POST', '/api/trials', { name: 'تنتهي', start_date: addD(today, -2), days: 3 }), 't').id;
+    assert.equal(ok(await owner('GET', `/api/trials/${e}`), 'g').trial.state, 'ending');
+    const f = ok(await owner('POST', '/api/trials', { name: 'منتهية', start_date: addD(today, -10), days: 3 }), 't').id;
+    assert.equal(ok(await owner('GET', `/api/trials/${f}`), 'g').trial.state, 'ended');
+    const dash = ok(await owner('GET', '/api/dashboard'), 'd'); assert.ok(dash.stats.trials_ending >= 1 && dash.stats.trials_ended >= 1);
+  });
+  await test('تحويل التجربة إلى عميل رسمي مع الاحتفاظ بتاريخها', async () => {
+    const r = ok(await owner('POST', `/api/trials/${trialId}/convert`, { work_start_date: today, subscription: { sub_type: 'open', monthly_amount: 2000, pay_day: 1 } }), 'conv');
+    const d = ok(await owner('GET', `/api/clients/${r.client_id}`), 'g');
+    assert.equal(d.client.name, 'تجربة متجر'); assert.equal(d.client.sub.open, true); assert.equal(d.client.sub.monthly_amount, 2000);
+    assert.equal(d.trial.id, trialId); assert.equal(d.trial.total_budget, 300); assert.ok(d.activity.some((a) => a.action === 'بدأ كعميل تجربة'));
+    assert.equal(ok(await owner('GET', `/api/trials/${trialId}`), 'g').trial.state, 'converted');
+  });
+  await test('لا يتم إنشاء عميل مكرر عند تكرار التحويل', async () => {
+    const before = ok(await owner('GET', '/api/clients'), 'l').items.filter((c) => c.name === 'تجربة متجر').length;
+    const results = await Promise.all([1, 2, 3].map(() => owner('POST', `/api/trials/${trialId}/convert`, {})));
+    assert.ok(results.every((x) => x.status === 409));
+    const after = ok(await owner('GET', '/api/clients'), 'l').items.filter((c) => c.name === 'تجربة متجر').length; assert.equal(before, 1); assert.equal(after, 1);
+  });
+
+  console.log('\nv1.1 — إشعارات الجوال');
+  await test('تشفير الإشعار (RFC 8291) يُفك بشكل صحيح من جهة الجوال', async () => {
+    const nodeCrypto = await import('node:crypto');
+    const ua = nodeCrypto.createECDH('prime256v1'); ua.generateKeys();
+    const authSecret = nodeCrypto.randomBytes(16);
+    const sub = { p256dh: ua.getPublicKey().toString('base64url'), auth: authSecret.toString('base64url') };
+    const { encryptPayload } = await import('../worker/lib/push.js');
+    const body = Buffer.from(await encryptPayload(sub, JSON.stringify({ title: 'اختبار', body: 'مرحبا' })));
+    const salt = body.subarray(0, 16), idlen = body[20], asPub = body.subarray(21, 21 + idlen), ct = body.subarray(21 + idlen);
+    const shared = ua.computeSecret(asPub);
+    const hk = (s0, ikm, info, len) => Buffer.from(nodeCrypto.hkdfSync('sha256', ikm, s0, info, len));
+    const ikm = hk(authSecret, shared, Buffer.concat([Buffer.from('WebPush: info\0'), ua.getPublicKey(), asPub]), 32);
+    const cek = hk(salt, ikm, Buffer.from('Content-Encoding: aes128gcm\0'), 16), nonce = hk(salt, ikm, Buffer.from('Content-Encoding: nonce\0'), 12);
+    const dec = nodeCrypto.createDecipheriv('aes-128-gcm', cek, nonce); dec.setAuthTag(ct.subarray(ct.length - 16));
+    const pt = Buffer.concat([dec.update(ct.subarray(0, ct.length - 16)), dec.final()]);
+    assert.equal(pt[pt.length - 1], 2); assert.equal(JSON.parse(pt.subarray(0, -1).toString()).title, 'اختبار');
+  });
+  await test('مفتاح VAPID وتسجيل جهاز وملخص التنبيهات', async () => {
+    const k = ok(await owner('GET', '/api/push/key'), 'k'); assert.equal(Buffer.from(k.publicKey, 'base64url').length, 65);
+    assert.equal(ok(await owner('GET', '/api/push/key'), 'k2').publicKey, k.publicKey, 'stable key');
+    const ua = (await import('node:crypto')).createECDH('prime256v1'); ua.generateKeys();
+    ok(await owner('POST', '/api/push/subscribe', { subscription: { endpoint: 'https://push.example.invalid/x', keys: { p256dh: ua.getPublicKey().toString('base64url'), auth: Buffer.alloc(16, 1).toString('base64url') } } }), 's');
+    assert.equal(ok(await owner('GET', '/api/push/status'), 'st').devices, 1);
+    const p = ok(await owner('GET', '/api/push/preview'), 'pv'); assert.ok(p.lines.some((l) => l.includes('تجربة')));
+    ok(await owner('POST', '/api/push/unsubscribe', { endpoint: 'https://push.example.invalid/x' }), 'u');
+  });
+  await test('النسخة الاحتياطية تشمل التجارب والـChecklist ولا تشمل مفاتيح الخادم', async () => {
+    const b = ok(await owner('POST', '/api/backup/export', {}), 'b');
+    assert.ok(b.data.trials.length >= 3 && b.data.checklist_entries.length >= 2); assert.ok(!JSON.stringify(b).includes('privateJwk'));
+    const st = ok(await owner('GET', '/api/settings'), 's'); assert.ok(!JSON.stringify(st).includes('privateJwk'));
+  });
+
   console.log('\nلوحة التحكم والتقويم والبيانات التجريبية');
   await test('لوحة التحكم والرسوم', async () => {
     const d = ok(await owner('GET', '/api/dashboard'), 'd'); assert.ok(d.stats.clients_total >= 1);

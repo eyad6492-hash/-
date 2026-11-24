@@ -4,6 +4,8 @@ import { loadClientsDerived } from '../lib/derive.js';
 import { addDays, addMonths, diffDays, computeMetrics } from '../lib/shim.js';
 import { encryptWithPassphrase, decryptWithPassphrase, encryptVault, decryptVault, vaultAvailable, sha256hex } from '../lib/crypto.js';
 import { TASK_PRIORITY } from '../../public/js/shared.js';
+import { upcomingRows, checklistItems, entryStatus } from './v11.js';
+import { trialState } from '../lib/shim.js';
 
 const monthStart = (d) => d.slice(0, 8) + '01';
 
@@ -31,8 +33,8 @@ function buckets(from, to, unit) {
   return out;
 }
 
-const EXPORT_TABLES = ['settings', 'categories', 'clients', 'subscriptions', 'freezes', 'payments', 'campaigns', 'campaign_snapshots', 'followups', 'tasks', 'reports', 'service_templates', 'quotes', 'activity_log'];
-const DEMO_TABLES = ['vault_entries', 'campaign_snapshots', 'freezes', 'payments', 'followups', 'tasks', 'reports', 'quotes', 'campaigns', 'subscriptions', 'clients', 'service_templates'];
+const EXPORT_TABLES = ['settings', 'categories', 'trials', 'clients', 'subscriptions', 'freezes', 'payments', 'campaigns', 'campaign_snapshots', 'followups', 'tasks', 'reports', 'service_templates', 'quotes', 'checklist_entries', 'activity_log'];
+const DEMO_TABLES = ['checklist_entries', 'vault_entries', 'campaign_snapshots', 'freezes', 'payments', 'followups', 'tasks', 'reports', 'quotes', 'campaigns', 'subscriptions', 'clients', 'service_templates', 'trials'];
 
 async function tableColumns(db, t) {
   const { results } = await db.prepare(`PRAGMA table_info(${t})`).all();
@@ -74,14 +76,42 @@ export const systemRoutes = {
       quotes_sent: (qs.sent || 0) + (qs.review || 0) + (qs.accepted || 0) + (qs.rejected || 0), quotes_accepted: qs.accepted || 0, quotes_pending: (qs.sent || 0) + (qs.review || 0),
     };
 
+    // v1.1 summaries: upcoming payments, trials, quick checklist
+    const up = money ? upcomingRows(all) : [];
+    stats.payments_upcoming = money ? up.filter((r) => r.next_due && r.days_to_due >= 0 && r.days_to_due <= 7 && r.status !== 'paid').length : null;
+    stats.payments_late = money ? up.filter((r) => r.status === 'late').length : null;
+    stats.payment_alerts = money ? up.filter((r) => r.pay_alert).length : null;
+    const { results: trialRows } = await db.prepare("SELECT * FROM trials WHERE status IN ('active','converting')").all();
+    const trialStates = trialRows.map((x) => ({ ...x, st: trialState(x, t) }));
+    stats.trials_active = trialStates.filter((x) => x.st === 'active' || x.st === 'ending').length;
+    stats.trials_ending = trialStates.filter((x) => x.st === 'ending').length;
+    stats.trials_ended = trialStates.filter((x) => x.st === 'ended').length;
+    if (can(ctx, 'followups.manage')) {
+      const items = checklistItems(ctx.settings);
+      const pauseCk = !!ctx.settings.freeze_pause_work;
+      const ckClients = cur.filter((c) => c.status === 'active' || (!pauseCk && c.status === 'frozen'));
+      const { results: ck } = await db.prepare('SELECT * FROM checklist_entries WHERE date = ?').bind(t).all();
+      const ckBy = Object.fromEntries(ck.map((e) => [e.client_id, entryStatus(e, items)]));
+      stats.checklist_total = ckClients.length;
+      stats.checklist_done = ckClients.filter((c) => ckBy[c.id] === 'done').length;
+      stats.checklist_attention = ckClients.filter((c) => ckBy[c.id] === 'attention').length;
+      stats.checklist_pending = ckClients.filter((c) => !ckBy[c.id] || ckBy[c.id] === 'none').length;
+    }
+
     // Alerts
     const alerts = [];
+    for (const r of up) if (r.pay_alert) alerts.push({ type: 'pay_alert', level: r.status === 'late' ? 'danger' : 'warn', client_id: r.client_id, link: '#/payments/upcoming',
+      text: `💳 ${r.name}: ${r.days_to_due > 0 ? `دفعة ${Math.round(r.amount_due)} بعد ${r.days_to_due} يوم (${r.next_due})` : r.days_to_due === 0 ? `دفعة ${Math.round(r.amount_due)} مستحقة اليوم` : `دفعة متأخرة منذ ${-r.days_to_due} يوم`}` });
+    for (const x of trialStates) {
+      if (x.st === 'ending') alerts.push({ type: 'trial_ending', level: 'warn', link: `#/trials/${x.id}`, text: `🧪 تجربة ${x.name} تنتهي ${x.end_date === t ? 'اليوم' : x.end_date}` });
+      if (x.st === 'ended') alerts.push({ type: 'trial_ended', level: 'info', link: `#/trials/${x.id}`, text: `🧪 انتهت تجربة ${x.name} — حوّلها إلى عميل أو حدّث حالتها` });
+    }
     for (const c of cur) {
       const s = c.sub;
-      if (s && s.state === 'expiring' && s.days_left <= 3) alerts.push({ type: 'expiring3', level: 'warn', client_id: c.id, text: `اشتراك ${c.name} ينتهي خلال ${s.days_left} يوم` });
-      else if (s && s.state === 'expiring') alerts.push({ type: 'renewal', level: 'info', client_id: c.id, text: `موعد تجديد ${c.name} قريب (${s.end_date})` });
+      if (s && !s.open && s.state === 'expiring' && s.days_left <= 3) alerts.push({ type: 'expiring3', level: 'warn', client_id: c.id, text: `اشتراك ${c.name} ينتهي خلال ${s.days_left} يوم` });
+      else if (s && !s.open && s.state === 'expiring') alerts.push({ type: 'renewal', level: 'info', client_id: c.id, text: `موعد تجديد ${c.name} قريب (${s.end_date})` });
       if (s && s.state === 'expired') alerts.push({ type: 'expired', level: 'danger', client_id: c.id, text: `اشتراك ${c.name} منتهي منذ ${-s.days_left} يوم` });
-      if (money && s && s.pay_status === 'late') alerts.push({ type: 'late', level: 'danger', client_id: c.id, text: `${c.name} متأخر في الدفع — المتبقي ${Math.round(s.remaining)}` });
+      if (money && s && s.pay_status === 'late' && !s.pay_alert) alerts.push({ type: 'late', level: 'danger', client_id: c.id, text: `${c.name} متأخر في الدفع — المتبقي ${Math.round(s.remaining)}` });
       if (c.status === 'frozen') alerts.push({ type: 'frozen', level: 'info', client_id: c.id, text: `اشتراك ${c.name} مجمد` });
       if (c.next_contact_date && c.next_contact_date <= t) alerts.push({ type: 'contact', level: 'warn', client_id: c.id, text: `${c.name} يحتاج تواصل (${c.next_contact_date})` });
     }
@@ -148,10 +178,25 @@ export const systemRoutes = {
     const db = ctx.env.DB, ev = [];
     const rows = async (sql, ...a) => (await db.prepare(sql).bind(...a).all()).results;
     for (const s of await rows("SELECT s.*, c.name cn FROM subscriptions s JOIN clients c ON c.id = s.client_id WHERE s.is_current = 1 AND c.status != 'former' AND ((s.end_date BETWEEN ?1 AND ?2) OR (s.start_date BETWEEN ?1 AND ?2))", from, to)) {
-      if (s.end_date >= from && s.end_date <= to) ev.push({ date: s.end_date, type: 'renewal', title: `تجديد اشتراك: ${s.cn}`, client_id: s.client_id });
+      if (s.sub_type !== 'open' && s.end_date >= from && s.end_date <= to) ev.push({ date: s.end_date, type: 'renewal', title: `تجديد اشتراك: ${s.cn}`, client_id: s.client_id });
       if (s.start_date >= from && s.start_date <= to) ev.push({ date: s.start_date, type: 'subscription', title: `بداية اشتراك: ${s.cn}`, client_id: s.client_id });
-      if (can(ctx, 'payments.view')) { const due = addDays(s.start_date, Number(ctx.settings.payment_grace_days) || 0); if (due >= from && due <= to && s.amount > 0) ev.push({ date: due, type: 'payment', title: `موعد دفع: ${s.cn}`, client_id: s.client_id }); }
     }
+    if (can(ctx, 'payments.view')) {
+      const { nthDue } = await import('../../public/js/shared.js');
+      for (const c of await loadClientsDerived(ctx, "WHERE status NOT IN ('former','stopped')")) {
+        const b = c.sub?.billing; if (!b || !b.next_due) continue;
+        if (b.monthly) {
+          for (let k = b.next_index, n = 0; n < 24; k++, n++) {
+            const d = nthDue(b.first_due, b.pay_day, k);
+            if (d > to || (c.sub.sub_type !== 'open' && d > c.sub.end_date)) break;
+            if (d >= from) ev.push({ date: d, type: 'payment', title: `موعد دفع: ${c.name} (${b.monthly})`, client_id: c.id, done: false });
+          }
+        }
+        else if (b.next_due >= from && b.next_due <= to) ev.push({ date: b.next_due, type: 'payment', title: `موعد دفع: ${c.name}`, client_id: c.id });
+      }
+    }
+    for (const x of await rows("SELECT id, name, end_date, start_date FROM trials WHERE status = 'active' AND end_date BETWEEN ? AND ?", from, to))
+      ev.push({ date: x.end_date, type: 'trial', title: `نهاية تجربة: ${x.name}`, trial_id: x.id });
     if (can(ctx, 'tasks.manage')) for (const t of await rows("SELECT t.*, c.name cn FROM tasks t LEFT JOIN clients c ON c.id = t.client_id WHERE t.due_date BETWEEN ? AND ? AND t.status != 'cancelled'", from, to))
       ev.push({ date: t.due_date, type: 'task', title: t.title + (t.cn ? ` — ${t.cn}` : ''), done: t.status === 'done', priority: t.priority, task_id: t.id, client_id: t.client_id });
     for (const f of await rows('SELECT f.date, f.client_id, f.rating, c.name cn FROM followups f JOIN clients c ON c.id = f.client_id WHERE f.date BETWEEN ? AND ?', from, to))
@@ -187,6 +232,8 @@ export const systemRoutes = {
       res.push({ type: 'task', id: t.id, title: t.title, sub: [t.cn, t.due_date].filter(Boolean).join(' • '), link: `#/tasks?open=${t.id}` });
     if (can(ctx, 'reports.view') || can(ctx, 'reports.create')) for (const r of await rows('SELECT r.id, r.platform, r.period_from, r.period_to, c.name cn FROM reports r JOIN clients c ON c.id = r.client_id WHERE c.name LIKE ?1 OR r.platform LIKE ?1 OR r.summary LIKE ?1 LIMIT 15', like))
       res.push({ type: 'report', id: r.id, title: `تقرير ${r.cn}`, sub: `${r.platform} • ${r.period_from} → ${r.period_to}`, link: `#/reports/${r.id}` });
+    if (can(ctx, 'clients.view')) for (const x of await rows('SELECT id, name, store_name, phone, status FROM trials WHERE name LIKE ?1 OR store_name LIKE ?1 OR phone LIKE ?1 OR business_type LIKE ?1 LIMIT 10', like))
+      res.push({ type: 'trial', id: x.id, title: x.name, sub: [x.store_name, x.phone].filter(Boolean).join(' • '), link: `#/trials/${x.id}` });
     if (can(ctx, 'quotes.view')) for (const q of await rows('SELECT id, number, client_name, total FROM quotes WHERE number LIKE ?1 OR client_name LIKE ?1 OR company LIKE ?1 LIMIT 10', like))
       res.push({ type: 'quote', id: q.id, title: `${q.number} — ${q.client_name}`, sub: `${q.total}`, link: `#/quotes/${q.id}` });
     return json({ results: res });

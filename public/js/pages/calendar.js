@@ -4,7 +4,7 @@ import { setTitle, go, refresh } from '../app.js';
 import { addDays, addMonths, parseDate } from '../shared.js';
 import { today } from '../forms.js';
 
-const TYPES = { renewal: 'تجديد اشتراك', subscription: 'بداية اشتراك', task: 'مهمة', followup: 'متابعة منجزة', followup_due: 'متابعة مجدولة', payment: 'موعد دفع', quote: 'انتهاء عرض سعر', contact: 'تواصل مع عميل' };
+const TYPES = { renewal: 'تجديد اشتراك', subscription: 'بداية اشتراك', task: 'مهمة', followup: 'متابعة منجزة', followup_due: 'متابعة مجدولة', payment: 'موعد دفع', quote: 'انتهاء عرض سعر', contact: 'تواصل مع عميل', trial: 'نهاية تجربة' };
 const DOW = ['أحد', 'إثنين', 'ثلاثاء', 'أربعاء', 'خميس', 'جمعة', 'سبت'];
 let view = 'month', cursor = null, selected = null;
 
@@ -19,7 +19,7 @@ export default async function calendarPage(main, _p, _q, stale) {
   if (stale()) return;
   const byDay = {}; for (const e of events) (byDay[e.date] ||= []).push(e);
   const t0 = today();
-  const evList = (list) => (list?.length ? html`<div class="list">${list.map((e) => html`<div class="item" data-ev="${e.client_id ? `#/clients/${e.client_id}` : e.task_id ? `#/tasks?open=${e.task_id}` : e.quote_id ? `#/quotes/${e.quote_id}` : ''}"><span class="lv ev-${e.type}" style="width:10px;height:10px;border-radius:50%;flex:none"></span><div class="it-body"><div class="it-title" style="${e.done ? 'opacity:.6' : ''}">${e.title}</div><div class="it-sub">${TYPES[e.type]}${e.done ? ' • منجز' : ''}</div></div>${icon('chevL', 'sm')}</div>`)}</div>` : empty('لا توجد أحداث', 'calendar'));
+  const evList = (list) => (list?.length ? html`<div class="list">${list.map((e) => html`<div class="item" data-ev="${e.client_id ? `#/clients/${e.client_id}` : e.task_id ? `#/tasks?open=${e.task_id}` : e.quote_id ? `#/quotes/${e.quote_id}` : e.trial_id ? `#/trials/${e.trial_id}` : ''}"><span class="lv ev-${e.type}" style="width:10px;height:10px;border-radius:50%;flex:none"></span><div class="it-body"><div class="it-title" style="${e.done ? 'opacity:.6' : ''}">${e.title}</div><div class="it-sub">${TYPES[e.type]}${e.done ? ' • منجز' : ''}</div></div>${icon('chevL', 'sm')}</div>`)}</div>` : empty('لا توجد أحداث', 'calendar'));
   const title = view === 'month' ? monthName(cursor) : view === 'week' ? `${date(from)} – ${date(to)}` : date(cursor);
   mount(main, html`
     <div class="row between" style="margin-bottom:12px">

@@ -2,7 +2,7 @@
 // (Settings → Demo data → delete). No real people or businesses.
 import { addDays, addMonths } from './shim.js';
 import { buildInsert, nowISO } from './util.js';
-import { DEFAULT_CHECKLIST } from '../../public/js/shared.js';
+import { DEFAULT_CHECKLIST, DEFAULT_QUICK_CHECKLIST, OPEN_END } from '../../public/js/shared.js';
 
 const CLIENTS = [
   ['متجر العطور الفاخرة', 'متجر عطور', 'عطور', ['TikTok', 'Snapchat'], 3000, 300],
@@ -28,12 +28,13 @@ export async function seedDemo(ctx) {
     const cid = `demo_c${i + 1}`;
     const status = i === 4 ? 'frozen' : i === 7 ? 'stopped' : 'active';
     const start = addMonths(t, -(8 - i));
-    add('clients', { id: cid, name, store_name: store, phone: `05${String(10000000 + i * 1234567).slice(0, 8)}`, email: `client${i + 1}@example.com`, business_type: cat, category_ids: JSON.stringify([catId(cat)].filter(Boolean)), tags: JSON.stringify(i % 2 ? ['VIP'] : ['متجر سلة']), store_url: 'https://example.com', tiktok_url: 'https://www.tiktok.com/@example', platforms: JSON.stringify(platforms), daily_budget: budget, status, followup_every: i % 3 === 0 ? 1 : 2, next_contact_date: i === 2 ? t : null, notes: 'عميل تجريبي — يمكن حذفه من الإعدادات.', start_date: start, created_at: ts, updated_at: ts });
+    add('clients', { id: cid, name, store_name: store, phone: `05${String(10000000 + i * 1234567).slice(0, 8)}`, email: `client${i + 1}@example.com`, business_type: cat, category_ids: JSON.stringify([catId(cat)].filter(Boolean)), tags: JSON.stringify(i % 2 ? ['VIP'] : ['متجر سلة']), store_url: 'https://example.com', tiktok_url: 'https://www.tiktok.com/@example', platforms: JSON.stringify(platforms), daily_budget: budget, status, pay_alert_enabled: i < 3 ? 1 : 0, pay_alert_days: [5, 3, 7][i] || 3, followup_every: i % 3 === 0 ? 1 : 2, next_contact_date: i === 2 ? t : null, notes: 'عميل تجريبي — يمكن حذفه من الإعدادات.', start_date: i === 0 ? '2025-01-15' : start, created_at: ts, updated_at: ts });
     // past + current subscription
     const subStart = addDays(t, [-25, -27, -10, -40, -12, -5, -29, -60][i]);
     const prevId = `demo_s${i + 1}a`, curId = `demo_s${i + 1}b`;
     add('subscriptions', { id: prevId, client_id: cid, start_date: addMonths(subStart, -1), end_date: addDays(subStart, -1), duration_months: 1, amount, ad_budget: budget, services: 'إدارة حملات إعلانية', platforms: JSON.stringify(platforms), status: 'ended', is_current: 0, created_at: ts, updated_at: ts });
-    add('subscriptions', { id: curId, client_id: cid, start_date: subStart, end_date: addDays(addMonths(subStart, 1), -1), duration_months: 1, amount, ad_budget: budget, services: 'إدارة حملات إعلانية + تقارير أسبوعية', platforms: JSON.stringify(platforms), status: status === 'frozen' ? 'frozen' : status === 'stopped' ? 'stopped' : 'active', is_current: 1, renewed_from: prevId, created_at: ts, updated_at: ts });
+    const openSub = i === 0 ? { sub_type: 'open', monthly_amount: amount, pay_day: 25, first_due_date: addDays(t, -60).slice(0, 8) + '25' } : {};
+    add('subscriptions', { id: curId, client_id: cid, ...openSub, start_date: subStart, end_date: i === 0 ? OPEN_END : addDays(addMonths(subStart, 1), -1), duration_months: i === 0 ? null : 1, amount, ad_budget: budget, services: 'إدارة حملات إعلانية + تقارير أسبوعية', platforms: JSON.stringify(platforms), status: status === 'frozen' ? 'frozen' : status === 'stopped' ? 'stopped' : 'active', is_current: 1, renewed_from: prevId, created_at: ts, updated_at: ts });
     add('payments', { id: id('p'), client_id: cid, subscription_id: prevId, amount, date: addDays(addMonths(subStart, -1), 1), method: 'transfer', type: 'subscription', period: 'الشهر السابق', created_at: ts });
     const paid = [amount, amount / 2, 0, amount, amount, 0, amount / 2, 0][i];
     if (paid) add('payments', { id: id('p'), client_id: cid, subscription_id: curId, amount: paid, date: addDays(subStart, 2), method: i % 2 ? 'cash' : 'transfer', type: 'subscription', period: 'الشهر الحالي', created_at: ts });
@@ -75,6 +76,16 @@ export async function seedDemo(ctx) {
     const items = [{ name: svc[n % 5][0], details: svc[n % 5][1], qty: 1, price }];
     const sub = price, tax = Math.round(sub * 0.15 * 100) / 100;
     add('quotes', { id: id('q'), number: `DEMO-${n + 1}`, client_name: name, company: name, phone: '0500000000', date: addDays(t, d), valid_until: addDays(t, d + 14), items: JSON.stringify(items), discount: 0, discount_type: 'amount', tax_enabled: 1, tax_rate: 15, subtotal: sub, discount_value: 0, tax_value: tax, total: sub + tax, terms: ctx.settings.quote_terms, status, created_at: ts, updated_at: ts });
+  });
+  // trials
+  [['متجر الهدايا الذكية', 'هدايا', 3, 0, 100], ['مطعم البيت الشامي', 'مطاعم', 7, -6, 150], ['متجر القهوة المختصة', 'مقاهي', 5, -9, 80]].forEach(([name, type, days, off, daily], n) => {
+    const start = addDays(t, off);
+    add('trials', { id: `demo_tr${n + 1}`, name, store_name: name, phone: '0550000000', business_type: type, platforms: JSON.stringify(['TikTok']), start_date: start, days, end_date: addDays(start, days - 1), daily_budget: daily, total_budget: daily * days, actual_spend: n ? daily * (days - 1) : null, status: 'active', alert_days: 1, notes: 'عميل تجربة (بيانات تجريبية)', created_at: ts, updated_at: ts });
+  });
+  // quick checklist history (yesterday + today)
+  const ids = DEFAULT_QUICK_CHECKLIST.map((x) => x.id);
+  [[1, 'demo_c1', ids], [1, 'demo_c2', ids.slice(0, 4)], [1, 'demo_c3', ids.slice(0, 2), 1], [0, 'demo_c1', ids.slice(0, 3)], [0, 'demo_c6', ids]].forEach(([back, cid, list, att], n) => {
+    add('checklist_entries', { id: `demo_ck${n}`, date: addDays(t, -back), client_id: cid, items: JSON.stringify(Object.fromEntries(list.map((k) => [k, true]))), needs_attention: att ? 1 : 0, user_id: ctx.user.id, updated_at: ts });
   });
   for (let i = 0; i < stmts.length; i += 200) await db.batch(stmts.slice(i, i + 200));
   return stmts.length;

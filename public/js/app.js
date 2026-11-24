@@ -18,6 +18,10 @@ const ROUTES = [
   ['/tasks', () => import('./pages/tasks.js')],
   ['/subscriptions', () => import('./pages/subscriptions.js')],
   ['/payments', () => import('./pages/payments.js')],
+  ['/payments/upcoming', () => import('./pages/payments-upcoming.js')],
+  ['/checklist', () => import('./pages/checklist.js')],
+  ['/trials', () => import('./pages/trials.js')],
+  ['/trials/:id', () => import('./pages/trials.js')],
   ['/campaigns', () => import('./pages/campaigns.js')],
   ['/campaigns/:id', () => import('./pages/campaign.js')],
   ['/reports', () => import('./pages/reports.js')],
@@ -53,10 +57,13 @@ export function refresh() { render(); }
 const MENU = [
   { href: '#/', label: 'الرئيسية', ic: 'home' },
   { href: '#/clients', label: 'العملاء', ic: 'users', perm: 'clients.view' },
+  { href: '#/trials', label: 'عملاء التجارب', ic: 'sparkles', perm: 'clients.view' },
   { href: '#/categories', label: 'الأنشطة والتصنيفات', ic: 'store', perm: 'clients.view' },
+  { href: '#/checklist', label: 'Checklist – المتابعة السريعة', ic: 'list', perm: 'followups.manage' },
   { href: '#/followup', label: 'المتابعة اليومية', ic: 'calendarCheck', perm: 'followups.manage' },
   { href: '#/tasks', label: 'المهام', ic: 'checkCircle', perm: 'tasks.manage' },
   { href: '#/subscriptions', label: 'الاشتراكات', ic: 'subs', perm: 'clients.view' },
+  { href: '#/payments/upcoming', label: 'الدفعات القادمة', ic: 'wallet', perm: 'payments.view' },
   { href: '#/payments', label: 'المدفوعات والتحصيل', ic: 'coins', perm: 'payments.view' },
   { href: '#/campaigns', label: 'الحملات الإعلانية', ic: 'megaphone', perm: 'campaigns.view' },
   { href: '#/reports', label: 'تقارير العملاء', ic: 'chart', perm: ['reports.view', 'reports.create'] },
@@ -119,7 +126,10 @@ export function setBell(n) { const d = $('#bell-dot'); if (!d) return; d.textCon
 
 async function quickActions() {
   const acts = [
+    { ic: 'list', c: 'qc-green', l: 'Checklist اليوم', href: '#/checklist', perm: 'followups.manage' },
     { ic: 'calendarCheck', c: 'qc-pink', l: 'ابدأ مراجعة اليوم', href: '#/followup?start=1', perm: 'followups.manage' },
+    { ic: 'wallet', c: 'qc-gold', l: 'الدفعات القادمة', href: '#/payments/upcoming', perm: 'payments.view' },
+    { ic: 'sparkles', c: 'qc-cyan', l: 'عميل تجربة', act: 'trial', perm: 'clients.create' },
     { ic: 'user_plus', c: 'qc-purple', l: 'إضافة عميل', act: 'client', perm: 'clients.create' },
     { ic: 'coins', c: 'qc-gold', l: 'تسجيل دفعة', act: 'payment', perm: 'payments.create' },
     { ic: 'bars', c: 'qc-blue', l: 'تقرير سريع', href: '#/reports/new', perm: 'reports.create' },
@@ -136,6 +146,7 @@ async function quickActions() {
   if (!r) return;
   if (r.href) return go(r.href);
   const F = await import('./forms.js');
+  if (r.act === 'trial') { const T = await import('./pages/trials.js'); const t = await T.trialForm(); if (t?.id) go(`#/trials/${t.id}`); return; }
   const done = await ({ client: F.clientForm, payment: F.paymentForm, task: F.taskForm, campaign: F.campaignForm }[r.act])({});
   if (done) { if (r.act === 'client' && done.id) go(`#/clients/${done.id}`); else refresh(); }
 }
@@ -150,7 +161,8 @@ async function render() {
   prevMain.parentNode.replaceChild(main, prevMain);
   $$('.menu a, .bottomnav a').forEach((a) => {
     const h = a.dataset.href?.slice(1);
-    a.classList.toggle('active', !!h && (h === '/' ? path === '/' : path === h || path.startsWith(h + '/')));
+    const exact = MENU.some((m) => m.href.slice(1) === path);
+    a.classList.toggle('active', !!h && (h === '/' ? path === '/' : path === h || (!exact && path.startsWith(h + '/'))));
   });
   document.body.classList.toggle('no-fab', /\/(new|edit)$/.test(path) || !!query.start || (path === '/followup' && !!query.client) || /^\/(reports|quotes)\/[^/]+$/.test(path));
   const route = ROUTES.find((r) => r.re.test(path));

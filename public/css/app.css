@@ -405,3 +405,13 @@ details[open] > summary svg.i:last-child { transform: rotate(180deg); }
 .no-fab .fab { display: none; }
 .input-icon > input { padding-inline-start: 44px !important; }
 .input-icon > .eye + input, .input-icon > input:has(+ .eye) { padding-inline-end: 50px; }
+/* v1.1 quick checklist */
+.ck-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 10px; }
+@media (min-width: 720px) { .ck-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+.ck { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 6px 10px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); color: var(--text-2); font-size: 13px; font-weight: 600; text-align: start; cursor: pointer; transition: background .12s, border-color .12s; line-height: 1.3; }
+.ck .box { width: 24px; height: 24px; border-radius: 7px; border: 2px solid var(--border-2); display: grid; place-items: center; flex: none; color: transparent; transition: all .12s; }
+.ck.on { background: rgba(34, 197, 94, .12); border-color: rgba(34, 197, 94, .4); color: var(--text); }
+.ck.on .box { background: linear-gradient(135deg, #16a34a, #22c55e); border-color: transparent; color: #fff; }
+.ck:active { transform: scale(.97); }
+.ck:disabled { cursor: default; opacity: .8; }
+.ev-trial { background: #d946ef; }

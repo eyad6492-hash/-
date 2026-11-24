@@ -1,7 +1,7 @@
 import { HttpError, bad, buildInsert, buildUpdate, dateOrNull, json, jsonArr, newId, notFound, nowISO, numOrNull, intOrNull, oneOf, parseArr, readJson, reqStr, str, url } from '../lib/util.js';
 import { log, need, can } from '../lib/context.js';
 import { loadClientsDerived, deriveSub } from '../lib/derive.js';
-import { addDays, addMonths, diffDays } from '../lib/shim.js';
+import { addDays, addMonths, diffDays, OPEN_END } from '../lib/shim.js';
 import { PAY_METHODS, PAY_TYPES } from '../../public/js/shared.js';
 
 const CLIENT_STATUSES = ['active', 'stopped', 'frozen', 'former'];
@@ -22,6 +22,8 @@ function clientFields(b, partial = false) {
     start_date: b.start_date !== undefined ? dateOrNull(b.start_date) : undefined,
     platforms: b.platforms !== undefined ? jsonArr(b.platforms) : undefined,
     daily_budget: b.daily_budget !== undefined ? numOrNull(b.daily_budget) : undefined,
+    pay_alert_enabled: b.pay_alert_enabled !== undefined ? (b.pay_alert_enabled ? 1 : 0) : undefined,
+    pay_alert_days: b.pay_alert_days !== undefined ? Math.min(90, Math.max(1, intOrNull(b.pay_alert_days) || 3)) : undefined,
     followup_every: b.followup_every !== undefined ? Math.max(1, intOrNull(b.followup_every) || 1) : undefined,
     next_contact_date: b.next_contact_date !== undefined ? dateOrNull(b.next_contact_date) : undefined,
     notes: b.notes !== undefined ? str(b.notes, 10000) : undefined,
@@ -32,14 +34,27 @@ function clientFields(b, partial = false) {
   return f;
 }
 
-function subFields(ctx, b) {
+export function subFields(ctx, b) {
   const start = dateOrNull(b.start_date) || ctx.today;
+  const type = oneOf(b.sub_type, ['fixed', 'open'], 'fixed');
+  const monthly = numOrNull(b.monthly_amount);
+  const payDay = intOrNull(b.pay_day);
+  if (payDay !== null && (payDay < 1 || payDay > 31)) throw bad('يوم الدفع يجب أن يكون بين 1 و31');
+  const billing = { sub_type: type, pay_day: payDay, first_due_date: dateOrNull(b.first_due_date), billing_mode: oneOf(b.billing_mode, ['advance', 'arrears'], 'advance') };
+  if (type === 'open') {
+    const m = monthly ?? numOrNull(b.amount);
+    if (!m || m <= 0) throw bad('أدخل قيمة الاشتراك الشهرية للاشتراك المفتوح');
+    return { start_date: start, end_date: OPEN_END, duration_months: null, amount: m, monthly_amount: m, ...billing,
+      ad_budget: numOrNull(b.ad_budget), services: str(b.services, 2000), platforms: jsonArr(b.platforms), notes: str(b.notes, 2000) };
+  }
   const months = numOrNull(b.duration_months) ?? (Number(ctx.settings.default_sub_months) || 1);
-  const end = dateOrNull(b.end_date) || addDays(addMonths(start, months), -1);
+  const endIn = dateOrNull(b.end_date);
+  const end = endIn && endIn !== OPEN_END ? endIn : addDays(addMonths(start, months), -1);
   if (end < start) throw bad('تاريخ النهاية قبل تاريخ البداية');
   return {
     start_date: start, end_date: end, duration_months: months,
-    amount: numOrNull(b.amount) ?? 0, ad_budget: numOrNull(b.ad_budget), services: str(b.services, 2000),
+    amount: numOrNull(b.amount) ?? (monthly ? monthly * months : 0), monthly_amount: monthly && monthly > 0 ? monthly : null, ...billing,
+    ad_budget: numOrNull(b.ad_budget), services: str(b.services, 2000),
     platforms: jsonArr(b.platforms), notes: str(b.notes, 2000),
   };
 }
@@ -66,7 +81,7 @@ export async function createClient(ctx, b, extraLog = '') {
   const ins = buildInsert('clients', row);
   const stmts = [ctx.env.DB.prepare(ins.sql).bind(...ins.args)];
   let subId = null;
-  if (b.subscription && (b.subscription.amount || b.subscription.start_date)) {
+  if (b.subscription && (b.subscription.amount || b.subscription.monthly_amount || b.subscription.start_date || b.subscription.sub_type === 'open')) {
     subId = newId('s_');
     const s = { id: subId, client_id: id, ...subFields(ctx, b.subscription), status: 'active', is_current: 1, created_at: nowISO(), updated_at: nowISO() };
     const si = buildInsert('subscriptions', s);
@@ -102,7 +117,9 @@ export const clientRoutes = {
     const subs = await q('SELECT * FROM subscriptions WHERE client_id = ? ORDER BY start_date DESC');
     const paidRows = await q("SELECT subscription_id, SUM(amount) t FROM payments WHERE client_id = ? AND type = 'subscription' GROUP BY subscription_id");
     const paidBy = Object.fromEntries(paidRows.map((r) => [r.subscription_id, r.t]));
-    out.subscriptions = subs.map((s) => deriveSub(ctx, s, paidBy[s.id] || 0));
+    const rawClient = await ctx.env.DB.prepare('SELECT pay_alert_enabled, pay_alert_days, trial_id FROM clients WHERE id = ?').bind(id).first();
+    out.subscriptions = subs.map((s) => deriveSub(ctx, s, paidBy[s.id] || 0, rawClient));
+    if (rawClient.trial_id) out.trial = await ctx.env.DB.prepare('SELECT * FROM trials WHERE id = ?').bind(rawClient.trial_id).first();
     out.freezes = await q('SELECT * FROM freezes WHERE client_id = ? ORDER BY start_date DESC');
     if (can(ctx, 'payments.view')) out.payments = await q('SELECT * FROM payments WHERE client_id = ? ORDER BY date DESC, created_at DESC');
     if (can(ctx, 'campaigns.view')) out.campaigns = await q('SELECT * FROM campaigns WHERE client_id = ? ORDER BY updated_at DESC');
@@ -267,7 +284,18 @@ export const clientRoutes = {
     if (end < fr.start_date) throw bad('تاريخ فك التجميد قبل تاريخ التجميد');
     const days = diffDays(fr.start_date, end);
     const extend = b?.extend === undefined ? !!ctx.settings.freeze_extend : !!b.extend;
-    const newEnd = extend ? addDays(s.end_date, days) : s.end_date;
+    const open = s.sub_type === 'open';
+    const newEnd = extend && !open ? addDays(s.end_date, days) : s.end_date;
+    // monthly schedules shift by the frozen days too, so the client is not billed for frozen time
+    const shiftDue = extend && (open || s.monthly_amount > 0) && days > 0;
+    if (shiftDue) {
+      const { defaultFirstDue, computeBilling } = await import('../../public/js/shared.js');
+      const paidRow = await ctx.env.DB.prepare("SELECT COALESCE(SUM(amount),0) t FROM payments WHERE subscription_id = ? AND type = 'subscription'").bind(s.id).first();
+      const bill = computeBilling(s, paidRow.t, ctx.today);
+      const first = s.first_due_date || defaultFirstDue(s);
+      const shiftedNext = addDays(bill.next_due || first, days);
+      await ctx.env.DB.prepare('UPDATE subscriptions SET first_due_date = ?, pay_day = ? WHERE id = ?').bind(addDays(first, days), Number(shiftedNext.slice(8)), s.id).run();
+    }
     const db = ctx.env.DB;
     await db.batch([
       db.prepare('UPDATE freezes SET end_date = ?, actual_days = ?, end_after = ? WHERE id = ?').bind(end, days, newEnd, fr.id),

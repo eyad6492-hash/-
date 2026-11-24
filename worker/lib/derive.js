@@ -1,4 +1,4 @@
-import { addDays, diffDays, parseArr } from './shim.js';
+import { addDays, diffDays, parseArr, computeBilling, tenure } from './shim.js';
 
 /**
  * Loads every client with its current subscription and payment totals, and
@@ -29,37 +29,40 @@ export async function loadClientsDerived(ctx, where = '', args = []) {
   }));
 }
 
-export function deriveSub(ctx, sub, paid) {
+export function deriveSub(ctx, sub, paid, client) {
   if (!sub) return null;
   const s = ctx.settings, today = ctx.today;
-  const days_left = diffDays(today, sub.end_date);
+  const open = sub.sub_type === 'open';
+  const soonDays = client?.pay_alert_enabled ? Number(client.pay_alert_days) || 3 : Number(s.due_soon_days) || 3;
+  const bill = computeBilling(sub, paid, today, { grace: Number(s.payment_grace_days) || 0, soonDays });
+  const days_left = open ? null : diffDays(today, sub.end_date);
   const amount = Number(sub.amount) || 0;
-  const remaining = Math.max(amount - paid, 0);
-  let pay_status = 'none';
-  if (amount > 0) {
-    if (remaining <= 0.009) pay_status = 'paid';
-    else if (today > addDays(sub.start_date, Number(s.payment_grace_days) || 0)) pay_status = 'late';
-    else if (paid > 0) pay_status = 'partial';
-    else pay_status = 'due';
-  }
+  const monthlyMode = !!bill.monthly;
+  const remaining = monthlyMode ? bill.owed_now : Math.max(amount - paid, 0);
+  let pay_status = bill.status;
+  if (sub.status === 'frozen' && (pay_status === 'late' || pay_status === 'due')) pay_status = 'due';
   let state = sub.status;
-  if (sub.status === 'active' || sub.status === 'pending_renewal') {
+  if (!open && (sub.status === 'active' || sub.status === 'pending_renewal')) {
     if (days_left < 0) state = 'expired';
     else if (sub.status === 'pending_renewal') state = 'pending_renewal';
     else if (days_left <= (Number(s.expiring_days) || 7)) state = 'expiring';
   }
-  return { ...sub, platforms: parseArr(sub.platforms), days_left, paid, remaining, pay_status, partial: paid > 0 && remaining > 0.009, state };
+  const alertOn = !!client?.pay_alert_enabled && !!bill.next_due && ['soon', 'due', 'late'].includes(pay_status) && sub.status !== 'frozen' && sub.status !== 'stopped';
+  return {
+    ...sub, platforms: parseArr(sub.platforms), open, end_date: open ? null : sub.end_date, days_left, paid, remaining,
+    pay_status, partial: bill.partial, state, billing: bill, next_due: bill.next_due, amount_due: bill.amount_due, days_to_due: bill.days_to_due, pay_alert: alertOn,
+  };
 }
 
 function derive(ctx, c, sub, paid, extra) {
-  const d = deriveSub(ctx, sub, paid);
+  const d = deriveSub(ctx, sub, paid, c);
   const flags = [];
   if (c.status === 'former' || c.archived_at) flags.push('former');
   if (c.status === 'frozen' || d?.state === 'frozen') flags.push('frozen');
   if (c.status === 'stopped') flags.push('stopped');
   if (d) {
     if (d.state === 'expired') flags.push('expired');
-    if (d.pay_status === 'late') flags.push('late');
+    if (d.pay_status === 'late' && d.state !== 'frozen') flags.push('late');
     if (d.partial) flags.push('partial');
     if (d.state === 'expiring') flags.push('expiring');
     if (d.state === 'pending_renewal' || (d.state === 'expiring' && d.days_left <= 3) || d.state === 'expired') flags.push('renewal');
@@ -69,6 +72,6 @@ function derive(ctx, c, sub, paid, extra) {
     ...c,
     category_ids: parseArr(c.category_ids), tags: parseArr(c.tags), platforms: parseArr(c.platforms),
     other_links: parseArr(c.other_links), custom_fields: parseArr(c.custom_fields),
-    sub: d, flags, status_display, ...extra,
+    sub: d, flags, status_display, tenure: tenure(c.start_date, ctx.today), pay_alert_enabled: !!c.pay_alert_enabled, ...extra,
   };
 }

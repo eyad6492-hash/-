@@ -15,6 +15,9 @@
       "migrations_dir": "migrations"
     }
   ],
-  "observability": { "enabled": true }
+  "observability": { "enabled": true },
+  // 05:00 UTC = 08:00 Riyadh — daily push summary
+  "triggers": { "crons": ["0 5 * * *"] },
+  "vars": { "APP_ORIGIN": "https://media-buyer-control-center.media-buyer-control-center.workers.dev" }
   // Secrets (never commit them): set with `npx wrangler secret put SETUP_TOKEN` and `npx wrangler secret put VAULT_KEY`
 }

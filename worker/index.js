@@ -9,11 +9,12 @@ import { workRoutes } from './routes/work.js';
 import { quoteVaultRoutes } from './routes/quotes_vault.js';
 import { systemRoutes } from './routes/system.js';
 import { serveStatic } from './static.js';
+import { v11Routes, runDailyNotifications } from './routes/v11.js';
 
 const PUBLIC = new Set(['GET /api/auth/status', 'POST /api/auth/setup', 'POST /api/auth/login', 'POST /api/auth/logout', 'POST /api/auth/webauthn/login-options', 'POST /api/auth/webauthn/login']);
 
 const table = [];
-for (const group of [authRoutes, userRoutes, clientRoutes, workRoutes, quoteVaultRoutes, systemRoutes]) {
+for (const group of [authRoutes, userRoutes, clientRoutes, workRoutes, quoteVaultRoutes, systemRoutes, v11Routes]) {
   for (const [key, handler] of Object.entries(group)) {
     const [method, path] = key.split(' ');
     const names = [];
@@ -58,6 +59,16 @@ async function handleApi(req, env) {
 }
 
 export default {
+  // Daily cron (see wrangler.jsonc "triggers"): push a summary of payment alerts, trials and tasks.
+  async scheduled(_event, env, ectx) {
+    const origin = env.APP_ORIGIN || 'https://localhost';
+    ectx.waitUntil((async () => {
+      const ctx = await createContext(new Request(origin + '/cron'), env);
+      ctx.origin = origin;
+      const n = await runDailyNotifications(ctx);
+      console.log('daily notifications sent:', n);
+    })());
+  },
   async fetch(req, env) {
     const url = new URL(req.url);
     try {
