@@ -182,14 +182,14 @@ export const systemRoutes = {
       if (s.start_date >= from && s.start_date <= to) ev.push({ date: s.start_date, type: 'subscription', title: `بداية اشتراك: ${s.cn}`, client_id: s.client_id });
     }
     if (can(ctx, 'payments.view')) {
-      const { nthDue } = await import('../../public/js/shared.js');
+      const { dueAt } = await import('../../public/js/shared.js');
       for (const c of await loadClientsDerived(ctx, "WHERE status NOT IN ('former','stopped')")) {
         const b = c.sub?.billing; if (!b || !b.next_due) continue;
-        if (b.monthly) {
+        if (b.monthly || b.amount_unset) {
           for (let k = b.next_index, n = 0; n < 24; k++, n++) {
-            const d = nthDue(b.first_due, b.pay_day, k);
+            const d = dueAt(b.first_due, b.pay_day, b.cycle_days, k);
             if (d > to || (c.sub.sub_type !== 'open' && d > c.sub.end_date)) break;
-            if (d >= from) ev.push({ date: d, type: 'payment', title: `موعد دفع: ${c.name} (${b.monthly})`, client_id: c.id, done: false });
+            if (d >= from) ev.push({ date: d, type: 'payment', title: `موعد دفع: ${c.name}${b.monthly ? ` (${b.monthly})` : ''}`, client_id: c.id, done: false });
           }
         }
         else if (b.next_due >= from && b.next_due <= to) ev.push({ date: b.next_due, type: 'payment', title: `موعد دفع: ${c.name}`, client_id: c.id });

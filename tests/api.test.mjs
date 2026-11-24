@@ -374,6 +374,46 @@ async function main() {
     const st = ok(await owner('GET', '/api/settings'), 's'); assert.ok(!JSON.stringify(st).includes('privateJwk'));
   });
 
+  console.log('\nv1.2 — دورة 15 يوم، مبلغ غير محدد، التجميد، النسبة، الحذف');
+  await test('تحصيل كل 15 يومًا بناءً على آخر تحصيل', async () => {
+    const id = ok(await owner('POST', '/api/clients', { name: 'دورة 15', subscription: { sub_type: 'open', monthly_amount: 2500, cycle_days: 15, start_date: addD(today, -18), first_due_date: addD(today, -18) } }), 'c').id;
+    ok(await owner('POST', `/api/clients/${id}/payments`, { amount: 2500, date: addD(today, -18) }), 'p');
+    const d = ok(await owner('GET', `/api/clients/${id}`), 'g');
+    assert.equal(d.client.sub.next_due, addD(today, -3)); assert.equal(d.client.sub.pay_status, 'due'); assert.equal(d.client.sub.amount_due, 2500);
+    ok(await owner('POST', `/api/clients/${id}/payments`, { amount: 2500 }), 'p2');
+    assert.equal(ok(await owner('GET', `/api/clients/${id}`), 'g').client.sub.next_due, addD(today, 12));
+  });
+  await test('اشتراك مفتوح بدون مبلغ محدد لا يُفترض له مبلغ', async () => {
+    const id = ok(await owner('POST', '/api/clients', { name: 'بدون مبلغ', subscription: { sub_type: 'open', start_date: addD(today, -2), first_due_date: addD(today, -2) } }), 'c').id;
+    const d = ok(await owner('GET', `/api/clients/${id}`), 'g');
+    assert.equal(d.client.sub.billing.amount_unset, true); assert.equal(d.client.sub.amount_due, null); assert.equal(d.client.sub.remaining, 0); assert.equal(d.client.sub.pay_status, 'due');
+    const up = ok(await owner('GET', '/api/payments/upcoming'), 'u').items.find((x) => x.client_id === id); assert.ok(up && up.amount_unset);
+  });
+  await test('العميل المجمد بدون استحقاق نشط', async () => {
+    const id = ok(await owner('POST', '/api/clients', { name: 'مجمد', subscription: { sub_type: 'open', monthly_amount: 1500, start_date: addD(today, -40), first_due_date: addD(today, -40) } }), 'c').id;
+    ok(await owner('POST', `/api/clients/${id}/freeze`, { start_date: today, reason: 'اختبار' }), 'f');
+    const d = ok(await owner('GET', `/api/clients/${id}`), 'g');
+    assert.equal(d.client.sub.pay_status, 'frozen'); assert.equal(d.client.sub.next_due, null); assert.equal(d.client.sub.remaining, 0); assert.ok(!d.client.flags.includes('late'));
+    const up = ok(await owner('GET', '/api/payments/upcoming'), 'u').items.find((x) => x.client_id === id); assert.equal(up.status, 'frozen');
+  });
+  await test('عميل بنظام نسبة: بدون دفعات ثابتة مع تسجيل إيراد', async () => {
+    const id = ok(await owner('POST', '/api/clients', { name: 'عميل نسبة', billing_model: 'commission' }), 'c').id;
+    ok(await owner('POST', `/api/clients/${id}/payments`, { amount: 750, type: 'commission' }), 'p');
+    const d = ok(await owner('GET', `/api/clients/${id}`), 'g');
+    assert.equal(d.client.billing_model, 'commission'); assert.equal(d.client.sub, null); assert.equal(d.payments[0].type, 'commission');
+    assert.ok(!ok(await owner('GET', '/api/payments/upcoming'), 'u').items.some((x) => x.client_id === id));
+  });
+  await test('الحذف النهائي للمالك فقط مع معاينة البيانات المرتبطة', async () => {
+    const id = ok(await owner('POST', '/api/clients', { name: 'للحذف', subscription: { sub_type: 'open', monthly_amount: 100 } }), 'c').id;
+    ok(await owner('POST', `/api/clients/${id}/payments`, { amount: 100 }), 'p');
+    const pv = ok(await owner('GET', `/api/clients/${id}/delete-preview`), 'pv'); assert.equal(pv.counts.payments, 1); assert.equal(pv.counts.subscriptions, 1);
+    const adminC = client();
+    ok(await owner('POST', '/api/users', { username: 'admin2', password: 'admin-password-1', display_name: 'مدير', role: 'admin' }), 'u');
+    ok(await adminC('POST', '/api/auth/login', { username: 'admin2', password: 'admin-password-1' }), 'l');
+    assert.equal((await adminC('DELETE', `/api/clients/${id}`)).status, 403);
+    ok(await owner('DELETE', `/api/clients/${id}`), 'del'); assert.equal((await owner('GET', `/api/clients/${id}`)).status, 404);
+  });
+
   console.log('\nلوحة التحكم والتقويم والبيانات التجريبية');
   await test('لوحة التحكم والرسوم', async () => {
     const d = ok(await owner('GET', '/api/dashboard'), 'd'); assert.ok(d.stats.clients_total >= 1);

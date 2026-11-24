@@ -1,7 +1,7 @@
 import { html, icon, mount, money, moneyText, logo, date, empty, relDays } from '../ui.js';
 import { get } from '../api.js';
 import { can, setTitle, refresh } from '../app.js';
-import { PAY_STATUS } from '../shared.js';
+import { PAY_STATUS, SUB_STATUS } from '../shared.js';
 import { paymentForm } from '../forms.js';
 import { PAY_BADGE, waLink } from './client.js';
 
@@ -17,7 +17,7 @@ export default async function upcomingPage(main, _p, q, stale) {
   const match = {
     today: (r) => r.next_due && r.days_to_due <= 0 && r.status !== 'paid',
     3: (r) => within(r, 3), week: (r) => within(r, 7), 30: (r) => within(r, 30),
-    late: (r) => r.status === 'late', unpaid: (r) => r.status !== 'paid', paid: (r) => r.status === 'paid', all: () => true,
+    late: (r) => r.status === 'late', unpaid: (r) => !['paid', 'frozen'].includes(r.status), paid: (r) => r.status === 'paid', all: () => true,
   };
   const total = (list) => list.reduce((s, r) => s + (r.status === 'late' ? r.owed_now : r.amount_due || 0), 0);
   const late = items.filter(match.late), soon = items.filter(match.week);
@@ -35,8 +35,13 @@ export default async function upcomingPage(main, _p, q, stale) {
       <div class="row">${logo(x)}<div class="grow" style="min-width:0"><div class="bold ellipsis">${x.name}</div><div class="xs muted ellipsis">${[x.store_name, x.phone].filter(Boolean).join(' • ') || '—'}</div></div>
         <span class="badge ${PAY_BADGE[x.status]}">${PAY_STATUS[x.status]}${x.partial ? ' • جزئي' : ''}</span></div>
       <div class="grid-3" style="margin-top:10px;text-align:center">
-        <div><div class="xs muted">المبلغ</div><div class="bold">${money(x.status === 'late' ? x.owed_now : x.amount_due, 0)}</div></div>
-        <div><div class="xs muted">الاستحقاق</div><div class="bold small">${x.next_due ? date(x.next_due) : '—'}</div></div>
+        <div><div class="xs muted">الاشتراك${x.cycle_days ? ` / ${x.cycle_days} يوم` : x.monthly ? ' الشهري' : ''}</div><div class="bold">${x.amount_unset ? html`<span style="color:var(--gold)">غير محدد</span>` : money(x.monthly ?? x.one_time_amount, 0)}</div></div>
+        <div><div class="xs muted">المدفوع</div><div class="bold" style="color:#4ade80">${x.amount_unset || x.current_paid == null ? '—' : money(x.current_paid, 0)}</div></div>
+        <div><div class="xs muted">المتبقي</div><div class="bold" style="color:${x.status === 'paid' ? 'inherit' : '#fb7185'}">${x.amount_unset || x.status === 'frozen' ? '—' : money(x.owed_now > 0 ? x.owed_now : ['due', 'late'].includes(x.status) ? x.amount_due : 0, 0)}</div></div>
+      </div>
+      <div class="grid-3" style="margin-top:8px;text-align:center">
+        <div><div class="xs muted">التحصيل القادم</div><div class="bold small">${x.next_due ? date(x.next_due) : '—'}</div></div>
+        <div><div class="xs muted">حالة الاشتراك</div><div class="small bold">${SUB_STATUS[x.sub_state] || x.sub_state}</div></div>
         <div><div class="xs muted">الموعد</div><div class="bold small" style="color:${x.days_to_due < 0 ? '#fb7185' : x.days_to_due <= 3 ? 'var(--gold)' : 'inherit'}">${x.next_due ? relDays(x.days_to_due) : '—'}</div></div>
       </div>
       ${x.periods_due > 1 ? html`<div class="xs" style="color:#fb7185;margin-top:6px">${x.periods_due} دفعات شهرية متأخرة</div>` : ''}

@@ -37,14 +37,15 @@ const deriveTrial = (t, today) => ({ ...t, platforms: parseArr(t.platforms), sta
 
 /** Builds upcoming payment rows from derived clients. */
 export function upcomingRows(clients) {
-  return clients.filter((c) => c.status !== 'former' && c.status !== 'stopped' && c.sub && c.sub.billing && (c.sub.next_due || c.sub.billing.status === 'paid'))
+  return clients.filter((c) => c.status !== 'former' && c.status !== 'stopped' && c.billing_model !== 'commission' && c.sub && c.sub.billing && (c.sub.next_due || ['paid', 'frozen'].includes(c.sub.pay_status)))
     .map((c) => ({
       client_id: c.id, name: c.name, store_name: c.store_name, phone: c.phone, logo: c.logo, client_status: c.status,
-      subscription_id: c.sub.id, sub_type: c.sub.sub_type, monthly: c.sub.billing.monthly, amount_due: c.sub.amount_due, owed_now: c.sub.remaining,
+      subscription_id: c.sub.id, sub_type: c.sub.sub_type, sub_state: c.sub.state, monthly: c.sub.billing.monthly, one_time_amount: c.sub.billing.monthly ? null : c.sub.amount,
+      cycle_days: c.sub.billing.cycle_days, amount_unset: c.sub.billing.amount_unset, period_paid: c.sub.billing.period_paid, current_paid: c.sub.billing.current_paid ?? null, amount_due: c.sub.amount_due, owed_now: c.sub.remaining,
       periods_due: c.sub.billing.periods_due, next_due: c.sub.next_due, days_to_due: c.sub.days_to_due, status: c.sub.pay_status, partial: c.sub.partial,
       last_payment: c.last_payment, pay_alert: c.sub.pay_alert, pay_alert_enabled: c.pay_alert_enabled, pay_alert_days: c.pay_alert_days,
     }))
-    .sort((a, b) => (a.next_due || '9999').localeCompare(b.next_due || '9999'));
+    .sort((a, b) => (a.status === 'frozen') - (b.status === 'frozen') || (a.next_due || '9999').localeCompare(b.next_due || '9999'));
 }
 
 export const v11Routes = {

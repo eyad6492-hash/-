@@ -122,6 +122,9 @@ export const OPEN_END = '9999-12-31'; // stored end_date for open (no-expiry) su
 export const SUB_TYPES = { fixed: 'محدد المدة', open: 'اشتراك مفتوح / مستمر' };
 export const BILLING_MODES = { advance: 'مقدّم (أول الشهر)', arrears: 'بعد انتهاء الشهر' };
 PAY_STATUS.soon = 'قريب الاستحقاق';
+PAY_STATUS.frozen = 'مجمد — بدون استحقاق';
+PAY_TYPES.commission = 'نسبة / عمولة';
+export const BILLING_MODELS = { subscription: 'اشتراك', commission: 'نسبة / عمولة' };
 export const TRIAL_STATUS = { active: 'تجربة نشطة', ending: 'تنتهي قريبًا', ended: 'انتهت التجربة', converted: 'تحولت إلى عميل', no_deal: 'لم يتم الاتفاق', stopped: 'متوقفة' };
 export const CHECK_STATUS = { done: 'مكتمل', progress: 'قيد المتابعة', none: 'لم يبدأ', attention: 'يحتاج تدخل' };
 export const DEFAULT_QUICK_CHECKLIST = [
@@ -165,31 +168,47 @@ export function defaultFirstDue(sub) {
  * Monthly schedule when monthly_amount > 0 (always for open subscriptions); otherwise one payment.
  * status: paid | soon | due | late | none ; partial = an installment is partly paid.
  */
+/** k-th due date of a schedule (monthly on pay_day, or every cycle_days days). */
+export function dueAt(first, payDay, cycleDays, k) {
+  return cycleDays ? addDays(first, k * cycleDays) : nthDue(first, payDay, k);
+}
+
+/**
+ * Billing state of a subscription given the total paid towards it.
+ * Recurring schedule when monthly_amount > 0 or the subscription is open (even with no amount set yet);
+ * otherwise one payment. status: paid | soon | due | late | none ; partial = an installment is partly paid.
+ * amount_unset = open subscription whose amount has not been agreed yet (no amount is ever assumed).
+ */
 export function computeBilling(sub, paid, today, { grace = 5, soonDays = 3 } = {}) {
   if (!sub) return null;
   const open = sub.sub_type === 'open';
-  const monthly = num(open ? sub.monthly_amount ?? sub.amount : sub.monthly_amount) || 0;
-  const out = { monthly: monthly || null, paid, next_due: null, amount_due: 0, owed_now: 0, periods_due: 0, partial: false, status: 'none', days_to_due: null };
-  if (monthly > 0) {
+  const monthly = num(open ? sub.monthly_amount ?? (num(sub.amount) || null) : sub.monthly_amount) || 0;
+  const cycle = num(sub.cycle_days) || null;
+  const out = { monthly: monthly || null, cycle_days: cycle, paid, next_due: null, amount_due: 0, period_paid: 0, owed_now: 0, periods_due: 0, partial: false, status: 'none', days_to_due: null, amount_unset: open && !monthly };
+  if (monthly > 0 || open) {
     const first = sub.first_due_date || defaultFirstDue(sub);
     const payDay = sub.pay_day || parseDate(first).getUTCDate();
     const end = open ? null : sub.end_date;
     let total = Infinity;
-    if (end) { total = 0; while (total < 600 && nthDue(first, payDay, total) <= end) total++; total = Math.max(total, 1); }
-    let elapsed = 0; while (elapsed < total && elapsed < 600 && nthDue(first, payDay, elapsed) <= today) elapsed++;
-    const covered = Math.floor((paid + 0.009) / monthly);
-    const remainder = round2(paid - covered * monthly);
+    if (end) { total = 0; while (total < 600 && dueAt(first, payDay, cycle, total) <= end) total++; total = Math.max(total, 1); }
+    let elapsed = 0; while (elapsed < total && elapsed < 1200 && dueAt(first, payDay, cycle, elapsed) <= today) elapsed++;
+    const covered = monthly > 0 ? Math.floor((paid + 0.009) / monthly) : 0;
+    const remainder = monthly > 0 ? round2(paid - covered * monthly) : 0;
     out.periods_due = Math.max(elapsed - covered, 0);
-    out.owed_now = round2(Math.max(elapsed * monthly - paid, 0));
+    out.owed_now = monthly > 0 ? round2(Math.max(elapsed * monthly - paid, 0)) : 0;
     out.partial = remainder > 0.009;
+    out.period_paid = remainder;
     out.first_due = first; out.pay_day = payDay;
-    if (covered < total) { out.next_index = covered; out.next_due = nthDue(first, payDay, covered); out.amount_due = round2(monthly - remainder); }
+    if (monthly > 0 && elapsed > 0) out.current_paid = round2(Math.min(Math.max(paid - (elapsed - 1) * monthly, 0), monthly));
+    if (covered < total) { out.next_index = covered; out.next_due = dueAt(first, payDay, cycle, covered); out.amount_due = monthly > 0 ? round2(monthly - remainder) : null; }
   } else {
     const amount = num(sub.amount) || 0;
     if (amount <= 0) return out;
     const due = sub.first_due_date || sub.start_date;
     if (paid + 0.009 < amount) { out.next_due = due; out.amount_due = round2(amount - paid); out.owed_now = due <= today ? out.amount_due : 0; out.periods_due = due <= today ? 1 : 0; }
     out.partial = paid > 0 && paid + 0.009 < amount;
+    out.period_paid = Math.min(paid, amount);
+    out.current_paid = Math.min(paid, amount);
   }
   if (!out.next_due) { out.status = 'paid'; return out; }
   out.days_to_due = diffDays(today, out.next_due);

@@ -30,6 +30,7 @@ function clientFields(b, partial = false) {
     logo: b.logo !== undefined ? (b.logo && /^data:image\/(png|jpe?g|webp);base64,/.test(b.logo) && b.logo.length < 400000 ? b.logo : null) : undefined,
     custom_fields: b.custom_fields !== undefined ? jsonArr((b.custom_fields || []).filter((x) => x && x.label).map((x) => ({ label: str(x.label, 60), value: str(x.value, 500) }))) : undefined,
   };
+  if (b.billing_model !== undefined) f.billing_model = oneOf(b.billing_model, ['subscription', 'commission'], 'subscription');
   if (b.status !== undefined) f.status = oneOf(b.status, CLIENT_STATUSES, 'active');
   return f;
 }
@@ -41,10 +42,14 @@ export function subFields(ctx, b) {
   const payDay = intOrNull(b.pay_day);
   if (payDay !== null && (payDay < 1 || payDay > 31)) throw bad('يوم الدفع يجب أن يكون بين 1 و31');
   const billing = { sub_type: type, pay_day: payDay, first_due_date: dateOrNull(b.first_due_date), billing_mode: oneOf(b.billing_mode, ['advance', 'arrears'], 'advance') };
+  const cycle = intOrNull(b.cycle_days);
+  if (cycle !== null && (cycle < 1 || cycle > 365)) throw bad('دورة التحصيل يجب أن تكون بين 1 و365 يومًا');
+  billing.cycle_days = cycle;
   if (type === 'open') {
-    const m = monthly ?? numOrNull(b.amount);
-    if (!m || m <= 0) throw bad('أدخل قيمة الاشتراك الشهرية للاشتراك المفتوح');
-    return { start_date: start, end_date: OPEN_END, duration_months: null, amount: m, monthly_amount: m, ...billing,
+    // An open subscription may have no agreed amount yet — never assume one.
+    const m0 = monthly ?? numOrNull(b.amount);
+    const m = m0 && m0 > 0 ? m0 : null;
+    return { start_date: start, end_date: OPEN_END, duration_months: null, amount: m ?? 0, monthly_amount: m, ...billing,
       ad_budget: numOrNull(b.ad_budget), services: str(b.services, 2000), platforms: jsonArr(b.platforms), notes: str(b.notes, 2000) };
   }
   const months = numOrNull(b.duration_months) ?? (Number(ctx.settings.default_sub_months) || 1);
@@ -152,17 +157,28 @@ export const clientRoutes = {
     return json({ ok: true });
   },
 
+  // What a permanent delete would remove (shown in the confirmation dialog).
+  'GET /api/clients/:id/delete-preview': async (ctx) => {
+    need(ctx, 'clients.delete');
+    const c = await getClient(ctx, ctx.params.id);
+    const n = async (t, col = 'client_id') => (await ctx.env.DB.prepare(`SELECT COUNT(*) n FROM ${t} WHERE ${col} = ?`).bind(c.id).first()).n;
+    return json({ name: c.name, owner_only: true, can_delete: ctx.user.role === 'owner', counts: {
+      subscriptions: await n('subscriptions'), payments: await n('payments'), freezes: await n('freezes'), campaigns: await n('campaigns'), reports: await n('reports'),
+      followups: await n('followups'), checklist: await n('checklist_entries'), vault: await n('vault_entries'), tasks: await n('tasks'), quotes: await n('quotes') } });
+  },
   'DELETE /api/clients/:id': async (ctx) => {
     need(ctx, 'clients.delete');
+    if (ctx.user.role !== 'owner') throw new HttpError(403, 'الحذف النهائي للعملاء متاح لمالك التطبيق فقط — يمكنك الأرشفة بدلًا من ذلك');
     const c = await getClient(ctx, ctx.params.id);
     const db = ctx.env.DB;
     await db.batch([
-      ...['subscriptions', 'freezes', 'payments', 'campaign_snapshots', 'campaigns', 'followups', 'reports', 'vault_entries'].map((t) => db.prepare(`DELETE FROM ${t} WHERE client_id = ?`).bind(c.id)),
+      ...['subscriptions', 'freezes', 'payments', 'campaign_snapshots', 'campaigns', 'followups', 'reports', 'vault_entries', 'checklist_entries'].map((t) => db.prepare(`DELETE FROM ${t} WHERE client_id = ?`).bind(c.id)),
       db.prepare('UPDATE tasks SET client_id = NULL WHERE client_id = ?').bind(c.id),
       db.prepare('UPDATE quotes SET client_id = NULL WHERE client_id = ?').bind(c.id),
       db.prepare('UPDATE quotes SET converted_client_id = NULL WHERE converted_client_id = ?').bind(c.id),
       db.prepare('DELETE FROM clients WHERE id = ?').bind(c.id),
     ]);
+    await ctx.env.DB.prepare('UPDATE trials SET converted_client_id = NULL WHERE converted_client_id = ?').bind(c.id).run();
     await log(ctx, 'حذف عميل', { entity: 'client', entity_id: c.id, details: c.name });
     return json({ ok: true });
   },

@@ -2,7 +2,7 @@
 import { html, raw, icon, field, inp, sel, ta, checks, formSheet, toast, readImageAsDataURL, esc, moneyText, date } from './ui.js';
 import { get, post, put, lookups, invalidate } from './api.js';
 import { state } from './app.js';
-import { PLATFORMS, PAY_METHODS, PAY_TYPES, TASK_PRIORITY, TASK_STATUS, RECURRENCE, CAMPAIGN_STATUS, VAULT_TYPES, SUB_TYPES, BILLING_MODES, addMonths, addDays, tenure, defaultFirstDue } from './shared.js';
+import { BILLING_MODELS, PLATFORMS, PAY_METHODS, PAY_TYPES, TASK_PRIORITY, TASK_STATUS, RECURRENCE, CAMPAIGN_STATUS, VAULT_TYPES, SUB_TYPES, BILLING_MODES, addMonths, addDays, tenure, defaultFirstDue } from './shared.js';
 
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: state.settings.timezone || 'Asia/Riyadh' }).format(new Date());
 export { today };
@@ -29,6 +29,7 @@ export async function clientForm(c = {}) {
     <div class="form-grid cols-2">
       ${field('اسم المتجر / النشاط التجاري', inp('store_name', c.store_name))}
       ${field('نوع النشاط', inp('business_type', c.business_type, { ph: 'عطور، مطعم، ملابس…' }))}
+      ${field('نوع التعامل', sel('billing_model', BILLING_MODELS, c.billing_model || 'subscription'))}
       ${field('رقم الجوال', inp('phone', c.phone, { type: 'tel', ph: '05xxxxxxxx' }))}
       ${field('البريد الإلكتروني', inp('email', c.email, { type: 'email' }))}
     </div>
@@ -69,7 +70,7 @@ export async function clientForm(c = {}) {
     onSubmit: async (d, el) => {
       const rows = (sel2) => [...el.querySelectorAll(sel2)];
       const body = {
-        name: d.name, store_name: d.store_name, business_type: d.business_type, phone: d.phone, email: d.email,
+        name: d.name, store_name: d.store_name, business_type: d.business_type, billing_model: d.billing_model, phone: d.phone, email: d.email,
         category_ids: d.category_ids || [], tags: String(d.tags || '').split(/[,،]/).map((s) => s.trim()).filter(Boolean), platforms: d.platforms || [],
         store_url: d.store_url, tiktok_url: d.tiktok_url, tiktok_ads_url: d.tiktok_ads_url, start_date: d.start_date || null, daily_budget: d.daily_budget,
         followup_every: d.followup_every, next_contact_date: d.next_contact_date || null, notes: d.notes, logo: d.logo || null,
@@ -88,7 +89,7 @@ const linkRow = (l) => html`<div class="row" data-link-row><input data-l placeho
 const customRow = (x) => html`<div class="row" data-custom-row><input data-l placeholder="اسم الحقل" value="${x.label || ''}" style="flex:0 0 40%"><input data-u placeholder="القيمة" value="${x.value || ''}"></div>`;
 
 // ---------------- Payment ----------------
-export async function paymentForm({ client_id, payment, remaining, amount_due, next_due } = {}) {
+export async function paymentForm({ client_id, payment, remaining, amount_due, next_due, commission } = {}) {
   const editing = !!payment?.id;
   const p = payment || {};
   return formSheet({
@@ -100,7 +101,7 @@ export async function paymentForm({ client_id, payment, remaining, amount_due, n
         ${field('المبلغ *', inp('amount', p.amount ?? (remaining || amount_due || ''), { type: 'number', step: 'any', min: 0, req: true }))}
         ${field('تاريخ الدفع', inp('date', p.date || today(), { type: 'date' }))}
         ${field('طريقة الدفع', sel('method', PAY_METHODS, p.method || 'transfer'))}
-        ${field('نوع الدفعة', sel('type', PAY_TYPES, p.type || 'subscription'))}
+        ${field('نوع الدفعة', sel('type', PAY_TYPES, p.type || (commission ? 'commission' : 'subscription')))}
         ${field('الفترة التي تغطيها', inp('period', p.period, { ph: 'مثال: نوفمبر 2026' }))}
         ${field('رقم مرجع (اختياري)', inp('reference', p.reference))}
       </div>${field('ملاحظات', ta('notes', p.notes, '', 2))}`,
@@ -198,6 +199,7 @@ export function subscriptionFields(s = {}, { start, prefix = '' } = {}) {
       <div data-fixed-only class="${type === 'open' ? 'hidden' : ''}">${field('قيمة الاشتراك الإجمالية', inp(n('amount'), type === 'open' ? '' : s.amount ?? '', { type: 'number', step: 'any', min: 0 }))}</div>
       ${field(html`قيمة الاشتراك الشهرية <span data-open-req class="${type === 'open' ? '' : 'hidden'}">*</span>`, inp(n('monthly_amount'), s.monthly_amount ?? '', { type: 'number', step: 'any', min: 0, ph: type === 'open' ? 'مطلوب' : 'اتركه فارغًا لدفعة واحدة' }))}
       ${field('يوم الدفع الشهري (1–31)', inp(n('pay_day'), s.pay_day ?? '', { type: 'number', min: 1, attrs: 'max="31"', ph: 'مثال: 25' }))}
+      ${field('دورة التحصيل كل (يوم) — اتركه فارغًا للشهري', inp(n('cycle_days'), s.cycle_days ?? '', { type: 'number', min: 1, attrs: 'max="365"', ph: 'شهري' }))}
       ${field('تاريخ أول استحقاق (اختياري)', inp(n('first_due_date'), s.first_due_date || '', { type: 'date' }))}
       ${field('طريقة الدفع الشهري', sel(n('billing_mode'), BILLING_MODES, s.billing_mode || 'advance'))}
     </div>
@@ -220,9 +222,8 @@ export function bindSubscriptionFields(root, prefix = '') {
 /** Extracts subscription fields (with prefix) from form data. */
 export function pickSub(d, prefix = '') {
   const g = (k) => d[prefix + k];
-  const out = { sub_type: g('sub_type') || 'fixed', start_date: g('start_date'), monthly_amount: g('monthly_amount'), pay_day: g('pay_day'), first_due_date: g('first_due_date') || null, billing_mode: g('billing_mode') };
-  if (out.sub_type === 'open') { if (!out.monthly_amount) throw new Error('أدخل قيمة الاشتراك الشهرية للاشتراك المفتوح'); }
-  else Object.assign(out, { duration_months: g('duration_months'), end_date: g('end_date'), amount: g('amount') ?? (out.monthly_amount ? out.monthly_amount * (g('duration_months') || 1) : null) });
+  const out = { sub_type: g('sub_type') || 'fixed', start_date: g('start_date'), monthly_amount: g('monthly_amount'), pay_day: g('pay_day'), cycle_days: g('cycle_days'), first_due_date: g('first_due_date') || null, billing_mode: g('billing_mode') };
+  if (out.sub_type !== 'open') Object.assign(out, { duration_months: g('duration_months'), end_date: g('end_date'), amount: g('amount') ?? (out.monthly_amount ? out.monthly_amount * (g('duration_months') || 1) : null) });
   return out;
 }
 

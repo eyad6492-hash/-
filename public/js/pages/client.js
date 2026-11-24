@@ -1,7 +1,7 @@
 import { html, raw, icon, mount, money, moneyText, n, logo, date, dateShort, dateTime, empty, toast, sheet, confirmBox, copyText, kpi, relDays } from '../ui.js';
 import { get, post, del, put, invalidate, lookups } from '../api.js';
 import { can, setTitle, go, refresh, state } from '../app.js';
-import { SUB_TYPES, BILLING_MODES, SUB_STATUS, PAY_STATUS, PAY_METHODS, PAY_TYPES, CAMPAIGN_STATUS, TASK_PRIORITY, TASK_STATUS, RATINGS, QUOTE_STATUS, computeMetrics } from '../shared.js';
+import { BILLING_MODELS, SUB_TYPES, BILLING_MODES, SUB_STATUS, PAY_STATUS, PAY_METHODS, PAY_TYPES, CAMPAIGN_STATUS, TASK_PRIORITY, TASK_STATUS, RATINGS, QUOTE_STATUS, computeMetrics } from '../shared.js';
 import * as F from '../forms.js';
 import { statusBadge } from './clients.js';
 
@@ -10,7 +10,7 @@ export const waLink = (phone, text = '') => {
   if (p.startsWith('00')) p = p.slice(2); else if (p.startsWith('05')) p = '966' + p.slice(1); else if (p.startsWith('5') && p.length === 9) p = '966' + p;
   return `https://wa.me/${p}${text ? '?text=' + encodeURIComponent(text) : ''}`;
 };
-const PAY_BADGE = { paid: 'b-green', partial: 'b-gold', unpaid: 'b-red', late: 'b-red', due: 'b-pink', soon: 'b-gold', none: 'b-gray' };
+const PAY_BADGE = { paid: 'b-green', partial: 'b-gold', unpaid: 'b-red', late: 'b-red', due: 'b-pink', soon: 'b-gold', none: 'b-gray', frozen: 'b-blue' };
 const SUB_BADGE = { active: 'b-green', expiring: 'b-gold', expired: 'b-red', frozen: 'b-blue', stopped: 'b-gray', pending_renewal: 'b-purple', ended: 'b-gray' };
 const CAMP_BADGE = { active: 'b-green', stopped: 'b-gray', review: 'b-blue', optimize: 'b-gold', rejected: 'b-red', ended: 'b-gray', paused: 'b-purple' };
 const PRIO_BADGE = { low: 'b-gray', medium: 'b-blue', high: 'b-gold', urgent: 'b-red' };
@@ -41,7 +41,7 @@ export default async function clientPage(main, { id }, q, stale) {
         <div class="grow"><h2 style="margin:0;font-size:20px;font-weight:800">${c.name}</h2>
           <div class="muted small">${[c.store_name, c.business_type].filter(Boolean).join(' • ') || '—'}</div>
           ${c.tenure ? html`<div class="small" style="color:var(--cyan);margin-top:2px">${icon('clock', 'sm')} معك منذ ${c.tenure.label}</div>` : ''}
-          <div class="row wrap" style="gap:6px;margin-top:6px">${statusBadge(c.status_display)}${c.flags.filter((f) => f !== c.status_display).slice(0, 3).map((f) => statusBadge(f))}${c.tags.map((t) => html`<span class="badge b-purple">#${t}</span>`)}</div></div>
+          <div class="row wrap" style="gap:6px;margin-top:6px">${statusBadge(c.status_display)}${c.flags.filter((f) => f !== c.status_display).slice(0, 3).map((f) => statusBadge(f))}${c.billing_model === 'commission' ? html`<span class="badge b-cyan">نسبة / عمولة</span>` : ''}${c.tags.map((t) => html`<span class="badge b-purple">#${t}</span>`)}</div></div>
         <button class="icon-btn" data-menu aria-label="خيارات">${icon('more')}</button>
       </div>
       <div class="grid-4" style="margin-top:14px">
@@ -65,6 +65,10 @@ export default async function clientPage(main, { id }, q, stale) {
           <div class="grow"><div class="xs muted">العميل منذ ${date(c.start_date)}</div><div class="bold" style="font-size:18px">مدة التعامل: ${c.tenure ? c.tenure.label : 'يبدأ ' + date(c.start_date)}</div>
           ${c.tenure ? html`<div class="xs muted"><span class="num">${c.tenure.total_months}</span> شهر • <span class="num">${n(c.tenure.days, 0)}</span> يوم حتى اليوم</div>` : ''}</div></div></div>` : ''}
       ${s && can('payments.view') ? billingCard() : ''}
+      ${c.billing_model === 'commission' && can('payments.view') ? html`<div class="card" style="margin-bottom:12px;padding:14px"><div class="row between"><b>${icon('percent', 'sm')} عميل بنظام نسبة / عمولة</b><span class="badge b-cyan">بدون اشتراك ثابت</span></div>
+        <p class="small muted" style="margin:6px 0 10px">لا تُنشأ له دفعات شهرية. سجّل الإيرادات أو النسبة المستحقة عند الحاجة.</p>
+        <div class="row between small"><span>إجمالي الإيرادات المسجلة</span><b>${money((d.payments || []).filter((p) => p.type === 'commission').reduce((a, p) => a + p.amount, 0))}</b></div>
+        ${can('payments.create') ? html`<button class="btn sm success block" style="margin-top:10px" data-act="payment">${icon('coins', 'sm')} تسجيل إيراد / نسبة</button>` : ''}</div>` : ''}
       <div class="grid-2">
         ${kv('تاريخ الاشتراك', s ? date(s.start_date) : '—', 'calendar', 'qc-purple')}
         ${kv('تاريخ الانتهاء', s ? (s.open ? html`بدون انتهاء<div class="xs muted">اشتراك مفتوح / مستمر</div>` : html`${date(s.end_date)}<div class="xs muted">${s.days_left >= 0 ? `متبقي ${s.days_left} يوم` : `منتهي منذ ${-s.days_left} يوم`}</div>`) : '—', 'calendar', 'qc-pink')}
@@ -100,7 +104,8 @@ export default async function clientPage(main, { id }, q, stale) {
         ['التصنيفات', c.category_names || null], ['المنصات', c.platforms.join('، ')], ['بداية العمل الفعلي', c.start_date ? date(c.start_date) : null], ['مدة التعامل', c.tenure ? `${c.tenure.label} (${n(c.tenure.days, 0)} يوم)` : null], ['تنبيه الدفع', c.pay_alert_enabled ? `مفعّل — قبل ${c.pay_alert_days} أيام` : 'غير مفعّل'], ['الميزانية اليومية', c.daily_budget ? money(c.daily_budget) : null],
         ['المراجعة كل', `${c.followup_every} يوم`], ['موعد التواصل القادم', c.next_contact_date ? date(c.next_contact_date) : null], ['تاريخ الإضافة', dateTime(c.created_at)],
         ...c.custom_fields.map((x) => [x.label, x.value])].map(([k, v]) => html`<div><span>${k}</span><span>${v || '—'}</span></div>`)}
-      </div>${can('clients.edit') ? html`<button class="btn block ghost" style="margin-top:12px" data-act="edit">${icon('edit')} تعديل البيانات</button>` : ''}</div>
+      </div>${can('clients.edit') ? html`<button class="btn block ghost" style="margin-top:12px" data-act="edit">${icon('edit')} تعديل البيانات</button>` : ''}
+      ${state.user.role === 'owner' ? html`<button class="btn block danger" style="margin-top:10px" data-act="delete">${icon('trash')} حذف العميل نهائيًا</button>` : ''}</div>
       ${d.trial ? html`<div class="card"><div class="section-head"><h3>${icon('sparkles', 'sm')} بدأ كعميل تجربة</h3><a href="#/trials/${d.trial.id}">عرض التجربة</a></div><div class="kvlist">
         <div><span>فترة التجربة</span><span>${date(d.trial.start_date)} ← ${date(d.trial.end_date)} (${d.trial.days} أيام)</span></div>
         <div><span>الميزانية اليومية / الإجمالية</span><span>${money(d.trial.daily_budget)} / ${money(d.trial.total_budget)}</span></div>
@@ -164,12 +169,12 @@ export default async function clientPage(main, { id }, q, stale) {
     const b = s.billing || {};
     const st = s.pay_status;
     return html`<div class="card" style="margin-bottom:12px;padding:14px;${st === 'late' ? 'border-color:rgba(244,63,94,.5)' : st === 'due' || st === 'soon' ? 'border-color:rgba(245,181,68,.45)' : ''}">
-      <div class="row between"><b>${icon('coins', 'sm')} الدفع ${b.monthly ? 'الشهري' : ''}</b><span class="badge ${PAY_BADGE[st]}" style="font-size:13px">${PAY_STATUS[st]}${s.partial ? ' • جزئي' : ''}</span></div>
+      <div class="row between"><b>${icon('coins', 'sm')} الدفع ${b.cycle_days ? `كل ${b.cycle_days} يوم` : b.monthly || b.amount_unset ? 'الشهري' : ''}</b><span class="badge ${PAY_BADGE[st]}" style="font-size:13px">${PAY_STATUS[st]}${s.partial ? ' • جزئي' : ''}</span></div>
       <div class="grid-2" style="margin-top:10px">
         <div><div class="xs muted">الدفعة القادمة</div><div class="bold">${s.next_due ? date(s.next_due) : '—'}</div>${s.next_due ? html`<div class="xs" style="color:${s.days_to_due < 0 ? '#fb7185' : 'var(--muted)'}">${relDays(s.days_to_due)}</div>` : ''}</div>
-        <div><div class="xs muted">المبلغ</div><div class="bold">${s.next_due ? money(s.amount_due) : '—'}</div>${b.periods_due > 1 ? html`<div class="xs" style="color:#fb7185">${b.periods_due} دفعات متأخرة</div>` : ''}</div>
+        <div><div class="xs muted">المبلغ</div><div class="bold">${b.amount_unset ? html`<span style="color:var(--gold)">غير محدد</span>` : s.next_due ? money(s.amount_due) : '—'}</div>${b.period_paid > 0 && s.partial ? html`<div class="xs muted">مدفوع ${money(b.period_paid)} من ${money(b.monthly)}</div>` : ''}${b.periods_due > 1 ? html`<div class="xs" style="color:#fb7185">${b.periods_due} دفعات متأخرة</div>` : ''}</div>
         <div><div class="xs muted">آخر دفعة</div><div class="bold">${lastPayment ? date(lastPayment.date) : '—'}</div></div>
-        <div><div class="xs muted">${b.monthly ? 'يوم الدفع' : 'نوع الدفع'}</div><div class="bold">${b.monthly ? `${b.pay_day} من كل شهر` : 'دفعة واحدة'}</div></div>
+        <div><div class="xs muted">${b.monthly || b.amount_unset ? 'موعد التحصيل' : 'نوع الدفع'}</div><div class="bold">${b.cycle_days ? `كل ${b.cycle_days} يوم` : b.monthly || b.amount_unset ? `${b.pay_day} من كل شهر` : 'دفعة واحدة'}</div></div>
       </div>
       <div class="row" style="margin-top:10px;gap:8px">${can('payments.create') && s.next_due ? html`<button class="btn sm success grow" data-act="payment">${icon('coins', 'sm')} تسجيل الدفعة</button>` : ''}
         ${can('clients.edit') ? html`<button class="btn sm ghost grow" data-act="alert">${icon('bell', 'sm')} ${c.pay_alert_enabled ? `التنبيه قبل ${c.pay_alert_days} أيام` : 'تفعيل التنبيه'}</button>` : ''}</div></div>`;
@@ -190,7 +195,8 @@ export default async function clientPage(main, { id }, q, stale) {
     notes: async () => after(await F.noteForm(c)),
     links: () => sheet({ title: 'روابط حسابات العميل', body: html`<div class="stack">${linksList()}</div>` }),
     copy: copyClient,
-    payment: async () => after(await F.paymentForm({ client_id: c.id, remaining: s?.remaining, amount_due: s?.amount_due, next_due: s?.next_due })),
+    payment: async () => after(await F.paymentForm({ client_id: c.id, remaining: s?.remaining, amount_due: s?.amount_due, next_due: s?.next_due, commission: c.billing_model === 'commission' })),
+    delete: () => deleteClient(c),
     alert: async () => after(await F.alertForm(c)),
     freeze: async () => after(await F.freezeForm(c)),
     unfreeze: async () => after(await F.unfreezeForm(c)),
@@ -218,6 +224,28 @@ export default async function clientPage(main, { id }, q, stale) {
   });
 }
 
+async function deleteClient(c) {
+  try {
+    const p = await get(`/api/clients/${c.id}/delete-preview`);
+    const L = { subscriptions: 'اشتراكات', payments: 'دفعات', freezes: 'سجلات تجميد', campaigns: 'حملات', reports: 'تقارير', followups: 'متابعات', checklist: 'سجلات Checklist', vault: 'حسابات في الخزنة' };
+    const rows = Object.entries(L).map(([k, l]) => [l, p.counts[k]]).filter(([, v]) => v);
+    const r = await sheet({ title: 'حذف العميل نهائيًا',
+      body: html`<p style="margin:0 0 10px;line-height:1.8">سيتم حذف <b>${c.name}</b> نهائيًا ولا يمكن التراجع. البيانات المرتبطة التي ستُحذف معه:</p>
+        <div class="kvlist">${rows.length ? rows.map(([l, v]) => html`<div><span>${l}</span><span class="num" style="color:#fb7185">${v}</span></div>`) : html`<div><span>لا توجد بيانات مرتبطة</span><span>—</span></div>`}
+        ${p.counts.tasks ? html`<div><span>مهام (تبقى بدون عميل)</span><span class="num">${p.counts.tasks}</span></div>` : ''}${p.counts.quotes ? html`<div><span>عروض أسعار (تبقى)</span><span class="num">${p.counts.quotes}</span></div>` : ''}</div>
+        <p class="small muted" style="margin:10px 0 0">💡 إذا أردت الاحتفاظ بالبيانات استخدم «الأرشفة» بدل الحذف.</p>
+        <label class="field" style="margin-top:12px"><span>للتأكيد اكتب: حذف</span><input data-confirm-word autocomplete="off"></label>`,
+      foot: html`<button class="btn ghost" data-close>إلغاء</button><button class="btn danger" data-ok disabled>حذف نهائي</button>`,
+      onMount: (el, close) => {
+        const ok = el.querySelector('[data-ok]');
+        el.querySelector('[data-confirm-word]').addEventListener('input', (e) => { ok.disabled = e.target.value.trim() !== 'حذف'; });
+        ok.addEventListener('click', () => close(true));
+      } });
+    if (!r) return;
+    await del(`/api/clients/${c.id}`); toast('تم حذف العميل نهائيًا'); invalidate('clients'); go('#/clients');
+  } catch (err) { toast(err.message, 'err'); }
+}
+
 async function paymentMenu(p, after) {
   const r = await sheet({ title: `دفعة ${moneyText(p.amount)}`, body: html`<div class="kvlist"><div><span>التاريخ</span><span>${date(p.date)}</span></div><div><span>الطريقة</span><span>${PAY_METHODS[p.method]}</span></div><div><span>النوع</span><span>${PAY_TYPES[p.type]}</span></div><div><span>الفترة</span><span>${p.period || '—'}</span></div><div><span>المرجع</span><span>${p.reference || '—'}</span></div><div><span>ملاحظات</span><span>${p.notes || '—'}</span></div></div>`,
     foot: can('payments.create') ? html`<button class="btn danger" data-x="del">${icon('trash')} حذف</button><button class="btn primary" data-x="edit">${icon('edit')} تعديل</button>` : '',
@@ -234,7 +262,7 @@ async function clientMenu(c, copyClient) {
     can('clients.edit') && c.status === 'stopped' && ['reactivate', 'play', 'إعادة تفعيل'],
     can('clients.edit') && c.status !== 'former' && ['archive', 'archive', 'نقل إلى العملاء السابقين (أرشفة)'],
     can('clients.edit') && c.status === 'former' && ['reactivate', 'rotate', 'إعادة تفعيل العميل'],
-    can('clients.delete') && ['delete', 'trash', 'حذف العميل نهائيًا'],
+    state.user.role === 'owner' && ['delete', 'trash', 'حذف العميل نهائيًا'],
   ].filter(Boolean);
   const r = await sheet({ title: c.name, body: html`<div class="list">${items.map(([k, ic, l]) => html`<button class="item" data-k="${k}" style="width:100%;text-align:start;color:${k === 'delete' ? '#fb7185' : 'inherit'}">${icon(ic)}<span class="grow">${l}</span></button>`)}</div>`,
     onMount: (el, close) => el.addEventListener('click', (e) => { const b = e.target.closest('[data-k]'); if (b) close(b.dataset.k); }) });
@@ -245,9 +273,7 @@ async function clientMenu(c, copyClient) {
     if (r === 'stop' && await confirmBox(`إيقاف ${c.name}؟ سيتوقف الاشتراك الحالي ويمكن إعادة التفعيل لاحقًا.`, { ok: 'إيقاف' })) { await post(`/api/clients/${c.id}/stop`, {}); toast('تم إيقاف العميل'); refresh(); }
     if (r === 'reactivate') { await post(`/api/clients/${c.id}/reactivate`, {}); toast('تمت إعادة التفعيل'); invalidate('clients'); refresh(); }
     if (r === 'archive' && await confirmBox(`نقل ${c.name} إلى العملاء السابقين؟ لن تُحذف أي بيانات (التقارير، الحملات، المدفوعات، الاشتراكات، المتابعة والملاحظات تبقى محفوظة) ويمكن إعادة تفعيله في أي وقت.`, { ok: 'أرشفة' })) { await post(`/api/clients/${c.id}/archive`, {}); toast('تم نقل العميل إلى الأرشيف'); invalidate('clients'); refresh(); }
-    if (r === 'delete' && await confirmBox(html`<b>تحذير:</b> سيتم حذف ${c.name} وجميع بياناته (الاشتراكات، المدفوعات، الحملات، التقارير، المتابعات وحسابات الخزنة) نهائيًا ولا يمكن التراجع.<br>هل تفضل الأرشفة بدلًا من ذلك؟`, { danger: true, ok: 'حذف نهائي', title: 'حذف العميل' })) {
-      await del(`/api/clients/${c.id}`); toast('تم حذف العميل'); invalidate('clients'); go('#/clients');
-    }
+    if (r === 'delete') await deleteClient(c);
   } catch (err) { toast(err.message, 'err'); }
 }
 export { raw, relDays };

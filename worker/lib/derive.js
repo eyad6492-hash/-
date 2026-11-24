@@ -38,9 +38,10 @@ export function deriveSub(ctx, sub, paid, client) {
   const days_left = open ? null : diffDays(today, sub.end_date);
   const amount = Number(sub.amount) || 0;
   const monthlyMode = !!bill.monthly;
-  const remaining = monthlyMode ? bill.owed_now : Math.max(amount - paid, 0);
+  const remaining = sub.status === 'frozen' ? 0 : monthlyMode ? bill.owed_now : Math.max(amount - paid, 0);
   let pay_status = bill.status;
-  if (sub.status === 'frozen' && (pay_status === 'late' || pay_status === 'due')) pay_status = 'due';
+  const frozen = sub.status === 'frozen';
+  if (frozen) { pay_status = 'frozen'; bill.next_due = null; bill.days_to_due = null; bill.owed_now = 0; bill.periods_due = 0; }
   let state = sub.status;
   if (!open && (sub.status === 'active' || sub.status === 'pending_renewal')) {
     if (days_left < 0) state = 'expired';
@@ -72,6 +73,6 @@ function derive(ctx, c, sub, paid, extra) {
     ...c,
     category_ids: parseArr(c.category_ids), tags: parseArr(c.tags), platforms: parseArr(c.platforms),
     other_links: parseArr(c.other_links), custom_fields: parseArr(c.custom_fields),
-    sub: d, flags, status_display, tenure: tenure(c.start_date, ctx.today), pay_alert_enabled: !!c.pay_alert_enabled, ...extra,
+    sub: d, flags, status_display, billing_model: c.billing_model || 'subscription', tenure: tenure(c.start_date, ctx.today), pay_alert_enabled: !!c.pay_alert_enabled, ...extra,
   };
 }
