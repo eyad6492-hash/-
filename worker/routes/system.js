@@ -33,8 +33,8 @@ function buckets(from, to, unit) {
   return out;
 }
 
-const EXPORT_TABLES = ['settings', 'categories', 'trials', 'clients', 'subscriptions', 'freezes', 'payments', 'campaigns', 'campaign_snapshots', 'followups', 'tasks', 'reports', 'service_templates', 'quotes', 'checklist_entries', 'activity_log'];
-const DEMO_TABLES = ['checklist_entries', 'vault_entries', 'campaign_snapshots', 'freezes', 'payments', 'followups', 'tasks', 'reports', 'quotes', 'campaigns', 'subscriptions', 'clients', 'service_templates', 'trials'];
+const EXPORT_TABLES = ['settings', 'categories', 'trials', 'clients', 'subscriptions', 'freezes', 'payments', 'campaigns', 'campaign_snapshots', 'followups', 'tasks', 'reports', 'service_templates', 'quotes', 'checklist_entries', 'quick_checks', 'activity_log'];
+const DEMO_TABLES = ['quick_checks', 'checklist_entries', 'vault_entries', 'campaign_snapshots', 'freezes', 'payments', 'followups', 'tasks', 'reports', 'quotes', 'campaigns', 'subscriptions', 'clients', 'service_templates', 'trials'];
 
 async function tableColumns(db, t) {
   const { results } = await db.prepare(`PRAGMA table_info(${t})`).all();
@@ -83,6 +83,8 @@ export const systemRoutes = {
     stats.payment_alerts = money ? up.filter((r) => r.pay_alert).length : null;
     const { results: trialRows } = await db.prepare("SELECT * FROM trials WHERE status IN ('active','converting')").all();
     const trialStates = trialRows.map((x) => ({ ...x, st: trialState(x, t) }));
+    const qcToday = (await one('SELECT COUNT(*) n FROM quick_checks q JOIN clients c ON c.id = q.client_id WHERE q.date = ? AND c.status != \'former\'', t)).n;
+    stats.quick_checked = qcToday; stats.quick_unchecked = Math.max(cur.length - qcToday, 0);
     stats.trials_active = trialStates.filter((x) => x.st === 'active' || x.st === 'ending').length;
     stats.trials_ending = trialStates.filter((x) => x.st === 'ending').length;
     stats.trials_ended = trialStates.filter((x) => x.st === 'ended').length;
@@ -396,7 +398,7 @@ export const systemRoutes = {
   'POST /api/demo/clear': async (ctx) => {
     need(ctx, 'settings.manage');
     const db = ctx.env.DB;
-    const stmts = DEMO_TABLES.map((t) => db.prepare(`DELETE FROM ${t} WHERE id LIKE 'demo_%'`));
+    const stmts = [db.prepare("DELETE FROM quick_checks WHERE client_id LIKE 'demo_%'"), ...DEMO_TABLES.map((t) => db.prepare(`DELETE FROM ${t} WHERE id LIKE 'demo_%'`))];
     stmts.push(db.prepare("DELETE FROM activity_log WHERE client_id LIKE 'demo_%'"));
     await db.batch(stmts);
     await log(ctx, 'حذف البيانات التجريبية', { entity: 'demo' });

@@ -414,6 +414,22 @@ async function main() {
     ok(await owner('DELETE', `/api/clients/${id}`), 'del'); assert.equal((await owner('GET', `/api/clients/${id}`)).status, 404);
   });
 
+  console.log('\nv1.3 — التشييك السريع من قائمة العملاء');
+  await test('تشييك وإلغاء تشييك يومي يُحفظ في قاعدة البيانات مع سجل', async () => {
+    let list = ok(await owner('GET', '/api/clients'), 'l');
+    const cid = list.items[0].id; assert.equal(list.items[0].checked_today, false);
+    ok(await owner('PUT', `/api/clients/${cid}/quick-check`, { checked: true }), 'c');
+    ok(await owner('PUT', `/api/clients/${cid}/quick-check`, { checked: true }), 'c2 (idempotent)');
+    list = ok(await owner('GET', '/api/clients'), 'l'); assert.equal(list.items.find((c) => c.id === cid).checked_today, true);
+    ok(await owner('PUT', `/api/clients/${cid}/quick-check`, { checked: true, date: addD(today, -1) }), 'yesterday');
+    let h = ok(await owner('GET', `/api/clients/${cid}/quick-checks`), 'h'); assert.equal(h.items.length, 2);
+    ok(await owner('PUT', `/api/clients/${cid}/quick-check`, { checked: false }), 'uncheck');
+    list = ok(await owner('GET', '/api/clients'), 'l'); assert.equal(list.items.find((c) => c.id === cid).checked_today, false);
+    h = ok(await owner('GET', `/api/clients/${cid}/quick-checks`), 'h'); assert.deepEqual(h.items.map((x) => x.date), [addD(today, -1)]);
+    assert.equal((await owner('PUT', `/api/clients/${cid}/quick-check`, { checked: true, date: addD(today, 1) })).status, 400);
+    const dash = ok(await owner('GET', '/api/dashboard'), 'd'); assert.equal(typeof dash.stats.quick_checked, 'number');
+  });
+
   console.log('\nلوحة التحكم والتقويم والبيانات التجريبية');
   await test('لوحة التحكم والرسوم', async () => {
     const d = ok(await owner('GET', '/api/dashboard'), 'd'); assert.ok(d.stats.clients_total >= 1);

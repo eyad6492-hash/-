@@ -415,3 +415,15 @@ details[open] > summary svg.i:last-child { transform: rotate(180deg); }
 .ck:active { transform: scale(.97); }
 .ck:disabled { cursor: default; opacity: .8; }
 .ev-trial { background: #d946ef; }
+/* v1.3 quick check in the clients list */
+.client-row { padding: 8px 10px 8px 12px; gap: 6px; cursor: default; }
+.client-row.checked { background: linear-gradient(90deg, rgba(255, 45, 120, .07), transparent 70%), var(--surface); border-color: rgba(255, 45, 120, .28); }
+.qc { width: 48px; height: 48px; flex: none; display: grid; place-items: center; border: 0; background: none; padding: 0; cursor: pointer; border-radius: 14px; -webkit-tap-highlight-color: transparent; }
+.qc:focus-visible { outline: 2px solid var(--pink); outline-offset: 2px; }
+.qc-box { width: 30px; height: 30px; border-radius: 9px; border: 2px solid var(--border-2); display: grid; place-items: center; color: transparent; background: var(--surface); transition: background .18s, border-color .18s, color .18s, transform .18s, box-shadow .18s; }
+.qc-box svg.i { width: 18px; height: 18px; stroke-width: 3; }
+.qc.on .qc-box, .qc-box.static { background: var(--grad-primary); border-color: transparent; color: #fff; box-shadow: 0 6px 16px rgba(255, 45, 120, .35); }
+.qc.pop .qc-box { animation: qcpop .35s ease-out; }
+@keyframes qcpop { 0% { transform: scale(.75); } 60% { transform: scale(1.15); } 100% { transform: scale(1); } }
+.qc:disabled { cursor: progress; }
+.qc-head .qc-box.static { width: 36px; height: 36px; }

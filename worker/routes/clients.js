@@ -104,7 +104,32 @@ export const clientRoutes = {
     const where = scope === 'archived' ? "WHERE status = 'former'" : scope === 'all' ? '' : "WHERE status != 'former'";
     let items = await loadClientsDerived(ctx, where);
     if (!can(ctx, 'payments.view')) items = items.map(stripMoney);
-    return json({ items });
+    // daily quick check state (today) for the list
+    const { results: qc } = await ctx.env.DB.prepare('SELECT client_id, checked_at, user_name FROM quick_checks WHERE date = ?').bind(ctx.today).all();
+    const qcBy = Object.fromEntries(qc.map((r) => [r.client_id, r]));
+    items = items.map((c) => ({ ...c, checked_today: !!qcBy[c.id], checked_at: qcBy[c.id]?.checked_at || null }));
+    return json({ today: ctx.today, items });
+  },
+  // Quick check (daily): checked=true records "reviewed today", false removes today's record.
+  'PUT /api/clients/:id/quick-check': async (ctx) => {
+    need(ctx, 'clients.view');
+    const c = await getClient(ctx, ctx.params.id);
+    const b = await readJson(ctx.req);
+    const date = dateOrNull(b.date) || ctx.today;
+    if (date > ctx.today) throw bad('لا يمكن التشييك لتاريخ مستقبلي');
+    if (b.checked) {
+      await ctx.env.DB.prepare('INSERT INTO quick_checks (id, date, client_id, user_id, user_name, checked_at) VALUES (?,?,?,?,?,?) ON CONFLICT(date, client_id) DO NOTHING')
+        .bind(newId('qc_'), date, c.id, ctx.user.id, ctx.user.display_name, nowISO()).run();
+    } else {
+      await ctx.env.DB.prepare('DELETE FROM quick_checks WHERE date = ? AND client_id = ?').bind(date, c.id).run();
+    }
+    await log(ctx, b.checked ? 'تشييك سريع' : 'إلغاء تشييك سريع', { entity: 'quick_check', entity_id: c.id, client_id: c.id, details: `${c.name} — ${date}` });
+    return json({ ok: true, checked: !!b.checked, date });
+  },
+  'GET /api/clients/:id/quick-checks': async (ctx) => {
+    need(ctx, 'clients.view');
+    const { results } = await ctx.env.DB.prepare('SELECT date, user_name, checked_at FROM quick_checks WHERE client_id = ? ORDER BY date DESC LIMIT 120').bind(ctx.params.id).all();
+    return json({ items: results });
   },
   'GET /api/clients/lite': async (ctx) => {
     const { results } = await ctx.env.DB.prepare("SELECT id, name, store_name, logo, status FROM clients ORDER BY name").all();
@@ -128,6 +153,7 @@ export const clientRoutes = {
     out.freezes = await q('SELECT * FROM freezes WHERE client_id = ? ORDER BY start_date DESC');
     if (can(ctx, 'payments.view')) out.payments = await q('SELECT * FROM payments WHERE client_id = ? ORDER BY date DESC, created_at DESC');
     if (can(ctx, 'campaigns.view')) out.campaigns = await q('SELECT * FROM campaigns WHERE client_id = ? ORDER BY updated_at DESC');
+    out.quick_checks = await q('SELECT date, user_name, checked_at FROM quick_checks WHERE client_id = ? ORDER BY date DESC LIMIT 60');
     out.followups = (await q('SELECT * FROM followups WHERE client_id = ? ORDER BY date DESC, created_at DESC LIMIT 100'))
       .map((f) => ({ ...f, checklist: parseArr(f.checklist), campaign_ids: parseArr(f.campaign_ids) }));
     out.tasks = await q('SELECT * FROM tasks WHERE client_id = ? ORDER BY CASE WHEN status IN (\'done\',\'cancelled\') THEN 1 ELSE 0 END, due_date');
@@ -172,7 +198,7 @@ export const clientRoutes = {
     const c = await getClient(ctx, ctx.params.id);
     const db = ctx.env.DB;
     await db.batch([
-      ...['subscriptions', 'freezes', 'payments', 'campaign_snapshots', 'campaigns', 'followups', 'reports', 'vault_entries', 'checklist_entries'].map((t) => db.prepare(`DELETE FROM ${t} WHERE client_id = ?`).bind(c.id)),
+      ...['subscriptions', 'freezes', 'payments', 'campaign_snapshots', 'campaigns', 'followups', 'reports', 'vault_entries', 'checklist_entries', 'quick_checks'].map((t) => db.prepare(`DELETE FROM ${t} WHERE client_id = ?`).bind(c.id)),
       db.prepare('UPDATE tasks SET client_id = NULL WHERE client_id = ?').bind(c.id),
       db.prepare('UPDATE quotes SET client_id = NULL WHERE client_id = ?').bind(c.id),
       db.prepare('UPDATE quotes SET converted_client_id = NULL WHERE converted_client_id = ?').bind(c.id),

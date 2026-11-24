@@ -61,6 +61,7 @@ export default async function dashboard(main, _p, _q, stale) {
         ${s.checklist_total !== undefined ? tile('لم تتم متابعتهم اليوم', s.checklist_pending, 'clock', 't-slate', '#/checklist') : ''}
         ${s.checklist_total !== undefined ? tile('مكتملة متابعتهم اليوم', s.checklist_done, 'checkCircle', 't-green', '#/checklist') : ''}
         ${s.checklist_total !== undefined ? tile('يحتاجون تدخلًا', s.checklist_attention, 'alert', 't-red', '#/checklist') : ''}
+        ${tile(`تشييك اليوم (${s.quick_checked}/${s.clients_total})`, s.quick_unchecked, 'checkSquare', 't-pink', '#/clients?qc=todo')}
         ${money_ok ? tile('الدفعات القادمة (7 أيام)', s.payments_upcoming, 'wallet', 't-gold', '#/payments/upcoming') : ''}
         ${money_ok ? tile('الدفعات المتأخرة', s.payments_late, 'alert', 't-red', '#/payments/upcoming?f=late') : ''}
         ${money_ok ? tile('عملاء لديهم تنبيه دفع', s.payment_alerts, 'bell', 't-orange', '#/payments/upcoming') : ''}

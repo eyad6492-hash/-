@@ -84,6 +84,17 @@ try {
   if (await payBtn.count()) { await payBtn.click(); await wait(400); await page.click('.sheet [data-submit]'); await wait(900); }
   else errors.push('[upcoming] no pay button');
   await shot('99-upcoming-after-pay');
+  // v1.3: quick check from clients list — must not navigate, must persist
+  await page.goto(`${BASE}/#/clients`); await wait(900);
+  const qcBtn = page.locator('[data-qc]').first(); const qcId = await qcBtn.getAttribute('data-qc');
+  await qcBtn.click(); await wait(700);
+  if (!page.url().endsWith('#/clients')) errors.push('[quickcheck] tapping the box navigated to ' + page.url());
+  if (!(await qcBtn.getAttribute('class')).includes('on')) errors.push('[quickcheck] box not shown as checked');
+  const saved = await page.evaluate(async (id) => (await (await fetch('/api/clients')).json()).items.find((c) => c.id === id).checked_today, qcId);
+  if (!saved) errors.push('[quickcheck] not saved in DB');
+  await shot('100-clients-quickcheck');
+  await page.click('[data-qcf="todo"]'); await wait(400); await shot('101-clients-qc-todo');
+  if (await page.locator(`[data-qc="${qcId}"]`).count()) errors.push('[quickcheck] checked client still shown in «لم يتم تشييكهم»');
   // desktop layout
   const desk = await browser.newContext({ viewport: { width: 1366, height: 860 }, locale: 'ar-SA' });
   const dp = await desk.newPage(); dp.on('pageerror', (e) => errors.push(`[desktop] ${e.message}`));

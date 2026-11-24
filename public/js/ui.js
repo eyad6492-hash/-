@@ -19,7 +19,7 @@ export function html(strings, ...vals) {
 }
 export const $ = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
-export function mount(el, content) { el.innerHTML = String(content); return el; }
+export function mount(el, content) { el.innerHTML = Array.isArray(content) ? content.map(String).join('') : String(content); return el; }
 
 export function icon(name, cls = '') {
   return raw(`<svg class="i ${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] || ICONS.info}</svg>`);
