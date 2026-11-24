@@ -11,7 +11,7 @@ const VAULT_KEY = Buffer.alloc(32, 7).toString('base64');
 
 fs.rmSync(STATE, { recursive: true, force: true });
 execSync(`npx wrangler d1 migrations apply DB --local --persist-to ${STATE}`, { stdio: 'ignore' });
-const dev = spawn('npx', ['wrangler', 'dev', '--local', '--port', String(PORT), '--persist-to', STATE, '--var', `SETUP_TOKEN:${SETUP_TOKEN}`, '--var', `VAULT_KEY:${VAULT_KEY}`], { stdio: ['ignore', 'pipe', 'pipe'] });
+const dev = spawn('npx', ['wrangler', 'dev', '--local', '--port', String(PORT), '--persist-to', STATE, '--var', `SETUP_TOKEN:${SETUP_TOKEN}`, '--var', `VAULT_KEY:${VAULT_KEY}`], { stdio: ['ignore', 'pipe', 'pipe'], detached: true });
 let devLog = ''; dev.stdout.on('data', (d) => (devLog += d)); dev.stderr.on('data', (d) => (devLog += d));
 
 function client() {
@@ -259,6 +259,6 @@ async function main() {
 main().catch((e) => { console.error(e); failed++; }).finally(() => {
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed && process.env.SHOW_LOG) console.log(devLog.slice(-4000));
-  dev.kill('SIGTERM');
+  try { process.kill(-dev.pid, 'SIGTERM'); } catch { dev.kill('SIGTERM'); }
   process.exit(failed ? 1 : 0);
 });

@@ -35,9 +35,9 @@ export async function loadSettings(env) {
 export function userPerms(user) {
   if (!user) return new Set();
   if (user.role === 'owner') return new Set(Object.keys(PERMISSIONS));
-  let p = [];
-  try { p = JSON.parse(user.permissions || '[]'); } catch { p = []; }
-  if (!p.length && ROLES[user.role]) p = ROLES[user.role].perms;
+  let p = null;
+  try { p = JSON.parse(user.permissions); } catch { p = null; }
+  if (!Array.isArray(p)) p = ROLES[user.role]?.perms || [];
   return new Set(p.filter((k) => k in PERMISSIONS));
 }
 

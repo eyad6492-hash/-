@@ -1,0 +1,27 @@
+{
+  "id": "/",
+  "name": "Media Buyer Control Center",
+  "short_name": "Media Buyer",
+  "description": "مركز إدارة أعمال الميديا باير",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "/#/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait",
+  "background_color": "#0b0c1b",
+  "theme_color": "#0b0c1b",
+  "categories": ["business", "productivity"],
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "ابدأ مراجعة اليوم", "url": "/#/followup?start=1", "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96" }] },
+    { "name": "تقرير سريع", "url": "/#/reports/new", "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96" }] },
+    { "name": "العملاء", "url": "/#/clients", "icons": [{ "src": "/icons/icon-96.png", "sizes": "96x96" }] }
+  ]
+}
