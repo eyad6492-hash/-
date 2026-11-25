@@ -95,6 +95,22 @@ try {
   await shot('100-clients-quickcheck');
   await page.click('[data-qcf="todo"]'); await wait(400); await shot('101-clients-qc-todo');
   if (await page.locator(`[data-qc="${qcId}"]`).count()) errors.push('[quickcheck] checked client still shown in «لم يتم تشييكهم»');
+  // v1.4: record a payment with "next payment after 15 days" from the client page
+  await page.goto(`${BASE}/#/clients/demo_c2?tab=payments`); await wait(900);
+  await page.click('[data-act="payment"]'); await wait(700);
+  await page.fill('.sheet [name=amount]', '700');
+  await page.click('.sheet [data-m="days"]'); await page.click('.sheet [data-days="15"]'); await wait(200);
+  const prev = await page.textContent('.sheet [data-nd-preview]'); if (!prev.includes('بعد 15')) errors.push('[pay] preview missing: ' + prev);
+  await shot('102-payment-form');
+  await page.click('.sheet [data-submit]'); await wait(1200);
+  const nd = await page.evaluate(async () => (await (await fetch('/api/clients/demo_c2')).json()).client.sub.next_due);
+  const exp = new Date(Date.now() + 15 * 864e5 + 3 * 3600e3).toISOString().slice(0, 10);
+  if (nd !== exp) errors.push(`[pay] next due ${nd} != ${exp}`);
+  await shot('103-payment-history');
+  await page.click('[data-act="next-due"]'); await wait(500); await page.click('.sheet [data-n="7"]'); await page.click('.sheet [data-submit]'); await wait(900);
+  await page.goto(`${BASE}/#/`); await wait(1200);
+  if (!(await page.locator('.up-row').count())) errors.push('[dashboard] upcoming payments section missing');
+  await page.locator('.up-row').first().scrollIntoViewIfNeeded(); await shot('104-dashboard-upcoming');
   // desktop layout
   const desk = await browser.newContext({ viewport: { width: 1366, height: 860 }, locale: 'ar-SA' });
   const dp = await desk.newPage(); dp.on('pageerror', (e) => errors.push(`[desktop] ${e.message}`));

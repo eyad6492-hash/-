@@ -23,7 +23,8 @@ function clientFields(b, partial = false) {
     platforms: b.platforms !== undefined ? jsonArr(b.platforms) : undefined,
     daily_budget: b.daily_budget !== undefined ? numOrNull(b.daily_budget) : undefined,
     pay_alert_enabled: b.pay_alert_enabled !== undefined ? (b.pay_alert_enabled ? 1 : 0) : undefined,
-    pay_alert_days: b.pay_alert_days !== undefined ? Math.min(90, Math.max(1, intOrNull(b.pay_alert_days) || 3)) : undefined,
+    pay_alert_days: b.pay_alert_days !== undefined ? Math.min(90, Math.max(0, intOrNull(b.pay_alert_days) ?? 3)) : undefined,
+    pay_alert_time: b.pay_alert_time !== undefined ? (/^\d{2}:\d{2}$/.test(String(b.pay_alert_time || '')) ? b.pay_alert_time : null) : undefined,
     followup_every: b.followup_every !== undefined ? Math.max(1, intOrNull(b.followup_every) || 1) : undefined,
     next_contact_date: b.next_contact_date !== undefined ? dateOrNull(b.next_contact_date) : undefined,
     notes: b.notes !== undefined ? str(b.notes, 10000) : undefined,
@@ -282,6 +283,20 @@ export const clientRoutes = {
     await log(ctx, 'تعديل اشتراك', { entity: 'subscription', entity_id: s.id, client_id: s.client_id, details: `${f.start_date} → ${f.end_date} — ${f.amount}` });
     return json({ ok: true });
   },
+  // Change the next due date without recording a payment (null = back to the automatic schedule).
+  'PUT /api/subscriptions/:id/next-due': async (ctx) => {
+    need(ctx, 'payments.create');
+    const s = await ctx.env.DB.prepare('SELECT * FROM subscriptions WHERE id = ?').bind(ctx.params.id).first();
+    if (!s) throw notFound();
+    const b = await readJson(ctx.req);
+    const next = b.date === null ? null : dateOrNull(b.date);
+    if (b.date !== null && !next) throw bad('اختر تاريخًا صحيحًا');
+    const [before] = await loadClientsDerived(ctx, 'WHERE id = ?', [s.client_id]);
+    await ctx.env.DB.prepare('UPDATE subscriptions SET next_due_override = ?, updated_at = ? WHERE id = ?').bind(next, nowISO(), s.id).run();
+    const [after] = await loadClientsDerived(ctx, 'WHERE id = ?', [s.client_id]);
+    await log(ctx, 'تعديل موعد الدفعة القادمة', { entity: 'subscription', entity_id: s.id, client_id: s.client_id, details: `${before?.sub?.next_due || '—'} → ${after?.sub?.next_due || '—'}${next === null ? ' (رجوع للجدول التلقائي)' : ''}` });
+    return json({ ok: true, next_due: after?.sub?.next_due || null });
+  },
   'DELETE /api/subscriptions/:id': async (ctx) => {
     need(ctx, 'subscriptions.edit');
     const s = await ctx.env.DB.prepare('SELECT * FROM subscriptions WHERE id = ?').bind(ctx.params.id).first();
@@ -330,7 +345,8 @@ export const clientRoutes = {
     const newEnd = extend && !open ? addDays(s.end_date, days) : s.end_date;
     // monthly schedules shift by the frozen days too, so the client is not billed for frozen time
     const shiftDue = extend && (open || s.monthly_amount > 0) && days > 0;
-    if (shiftDue) {
+    if (extend && s.next_due_override && days > 0) await ctx.env.DB.prepare('UPDATE subscriptions SET next_due_override = ? WHERE id = ?').bind(addDays(s.next_due_override, days), s.id).run();
+    if (shiftDue && !s.next_due_override) {
       const { defaultFirstDue, computeBilling } = await import('../../public/js/shared.js');
       const paidRow = await ctx.env.DB.prepare("SELECT COALESCE(SUM(amount),0) t FROM payments WHERE subscription_id = ? AND type = 'subscription'").bind(s.id).first();
       const bill = computeBilling(s, paidRow.t, ctx.today);
@@ -364,11 +380,39 @@ export const clientRoutes = {
     let subId = str(b.subscription_id, 40);
     if (!subId && type === 'subscription') subId = (await currentSub(ctx, c.id))?.id || null;
     const row = { id: newId('p_'), client_id: c.id, subscription_id: subId, amount, date: dateOrNull(b.date) || ctx.today, method: oneOf(b.method, Object.keys(PAY_METHODS), 'transfer'), period: str(b.period, 100), type, reference: str(b.reference, 100), notes: str(b.notes, 1000), created_at: nowISO() };
+    if (row.date > ctx.today) throw bad('تاريخ استلام الدفعة لا يمكن أن يكون في المستقبل');
+    // Next due date: after N days from the receipt date, an exact date, or the automatic schedule.
+    const mode = oneOf(b.next_due_mode, ['auto', 'days', 'date', 'none'], 'auto');
+    const sub = subId ? await ctx.env.DB.prepare('SELECT * FROM subscriptions WHERE id = ?').bind(subId).first() : null;
+    let nextDue = null, nextDays = null;
+    if (sub && (mode === 'days' || mode === 'date')) {
+      if (mode === 'days') { nextDays = intOrNull(b.next_due_days); if (!nextDays || nextDays < 1 || nextDays > 365) throw bad('عدد أيام الدفعة القادمة يجب أن يكون بين 1 و365'); nextDue = addDays(row.date, nextDays); }
+      else { nextDue = dateOrNull(b.next_due_date); if (!nextDue) throw bad('اختر تاريخ الدفعة القادمة'); if (nextDue <= row.date) throw bad('موعد الدفعة القادمة يجب أن يكون بعد تاريخ الاستلام'); nextDays = diffDays(row.date, nextDue); }
+    }
+    let prevDue = null;
+    if (sub) {
+      const [cur] = await loadClientsDerived(ctx, 'WHERE id = ?', [c.id]);
+      prevDue = cur?.sub?.id === sub.id ? cur.sub.next_due || null : null;
+    }
+    Object.assign(row, { prev_due_date: prevDue, next_due_date: nextDue, next_due_days: nextDue ? nextDays : null });
     const ins = buildInsert('payments', row);
-    await ctx.env.DB.prepare(ins.sql).bind(...ins.args).run();
+    const stmts = [ctx.env.DB.prepare(ins.sql).bind(...ins.args)];
+    if (sub && nextDue) stmts.push(ctx.env.DB.prepare('UPDATE subscriptions SET next_due_override = ?, updated_at = ? WHERE id = ?').bind(nextDue, nowISO(), sub.id));
+    if (b.alert && typeof b.alert === 'object') {
+      const t = /^\d{2}:\d{2}$/.test(String(b.alert.time || '')) ? b.alert.time : null;
+      stmts.push(ctx.env.DB.prepare('UPDATE clients SET pay_alert_enabled = ?, pay_alert_days = ?, pay_alert_time = ? WHERE id = ?')
+        .bind(b.alert.enabled ? 1 : 0, Math.min(90, Math.max(0, intOrNull(b.alert.days) ?? 1)), t, c.id));
+    }
+    await ctx.env.DB.batch(stmts);
+    if (sub && mode === 'auto') {  // record what the automatic schedule gives after this payment
+      const [after] = await loadClientsDerived(ctx, 'WHERE id = ?', [c.id]);
+      if (after?.sub?.next_due) await ctx.env.DB.prepare('UPDATE payments SET next_due_date = ? WHERE id = ?').bind(after.sub.next_due, row.id).run();
+      nextDue = after?.sub?.next_due || null;
+    }
     await touch(ctx, c.id);
-    await log(ctx, 'تسجيل دفعة', { entity: 'payment', entity_id: row.id, client_id: c.id, details: `${amount} — ${PAY_METHODS[row.method]}` });
-    return json({ id: row.id });
+    await log(ctx, 'تسجيل دفعة', { entity: 'payment', entity_id: row.id, client_id: c.id, details: `${amount} — ${PAY_METHODS[row.method]} — استلام ${row.date}${nextDue ? ` — الدفعة القادمة ${nextDue}${nextDays && mode === 'days' ? ` (بعد ${nextDays} يوم)` : ''}` : ''}` });
+    if (nextDue && b.alert?.enabled) await log(ctx, 'جدولة تنبيه الدفعة القادمة', { entity: 'alert', entity_id: c.id, client_id: c.id, details: `${nextDue}${b.alert.days ? ` — قبلها بـ ${b.alert.days} يوم` : ''}${b.alert.time ? ` — الساعة ${b.alert.time}` : ''}` });
+    return json({ id: row.id, next_due: nextDue });
   },
   'PUT /api/payments/:id': async (ctx) => {
     need(ctx, 'payments.create');

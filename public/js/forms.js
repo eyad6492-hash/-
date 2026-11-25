@@ -2,7 +2,7 @@
 import { html, raw, icon, field, inp, sel, ta, checks, formSheet, toast, readImageAsDataURL, esc, moneyText, date } from './ui.js';
 import { get, post, put, lookups, invalidate } from './api.js';
 import { state } from './app.js';
-import { BILLING_MODELS, PLATFORMS, PAY_METHODS, PAY_TYPES, TASK_PRIORITY, TASK_STATUS, RECURRENCE, CAMPAIGN_STATUS, VAULT_TYPES, SUB_TYPES, BILLING_MODES, addMonths, addDays, tenure, defaultFirstDue } from './shared.js';
+import { BILLING_MODELS, PLATFORMS, PAY_METHODS, PAY_TYPES, TASK_PRIORITY, TASK_STATUS, RECURRENCE, CAMPAIGN_STATUS, VAULT_TYPES, SUB_TYPES, BILLING_MODES, addMonths, addDays, diffDays, tenure, defaultFirstDue } from './shared.js';
 
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: state.settings.timezone || 'Asia/Riyadh' }).format(new Date());
 export { today };
@@ -92,23 +92,122 @@ const customRow = (x) => html`<div class="row" data-custom-row><input data-l pla
 export async function paymentForm({ client_id, payment, remaining, amount_due, next_due, commission } = {}) {
   const editing = !!payment?.id;
   const p = payment || {};
-  return formSheet({
-    title: editing ? 'تعديل دفعة' : 'تسجيل دفعة',
-    body: html`${editing ? '' : field('العميل *', await clientOptions(client_id))}
-      ${remaining ? html`<div class="badge b-gold" style="justify-self:start">المستحق حاليًا: ${moneyText(remaining)}</div>` : ''}
-      ${next_due ? html`<div class="badge b-blue" style="justify-self:start">الدفعة القادمة ${date(next_due)}: ${moneyText(amount_due)}</div>` : ''}
-      <div class="form-grid cols-2">
-        ${field('المبلغ *', inp('amount', p.amount ?? (remaining || amount_due || ''), { type: 'number', step: 'any', min: 0, req: true }))}
-        ${field('تاريخ الدفع', inp('date', p.date || today(), { type: 'date' }))}
+  if (editing) {
+    return formSheet({
+      title: 'تعديل دفعة',
+      body: html`<div class="form-grid cols-2">
+        ${field('المبلغ *', inp('amount', p.amount, { type: 'number', step: 'any', min: 0, req: true }))}
+        ${field('تاريخ استلام الدفعة', inp('date', p.date, { type: 'date' }))}
         ${field('طريقة الدفع', sel('method', PAY_METHODS, p.method || 'transfer'))}
-        ${field('نوع الدفعة', sel('type', PAY_TYPES, p.type || (commission ? 'commission' : 'subscription')))}
-        ${field('الفترة التي تغطيها', inp('period', p.period, { ph: 'مثال: نوفمبر 2026' }))}
-        ${field('رقم مرجع (اختياري)', inp('reference', p.reference))}
-      </div>${field('ملاحظات', ta('notes', p.notes, '', 2))}`,
-    submit: editing ? 'حفظ' : 'تسجيل الدفعة',
+        ${field('نوع الدفعة', sel('type', PAY_TYPES, p.type || 'subscription'))}
+        ${field('الفترة التي تغطيها', inp('period', p.period))}${field('رقم مرجع', inp('reference', p.reference))}</div>
+        ${field('ملاحظات', ta('notes', p.notes, '', 2))}
+        <p class="xs muted" style="margin:0">لتغيير موعد الدفعة القادمة استخدم «تعديل الموعد» في ملف العميل.</p>`,
+      submit: 'حفظ',
+      onSubmit: async (d) => { const r = await put(`/api/payments/${p.id}`, d); toast('تم تعديل الدفعة'); return r; },
+    });
+  }
+  const DAY_CHIPS = [7, 15, 30];
+  let info = null; // { client, sub, lastDays }
+  const loadInfo = async (id) => {
+    if (!id) return null;
+    const d = await get(`/api/clients/${id}`);
+    return { client: d.client, sub: d.client.sub, lastDays: (d.payments || []).find((x) => x.next_due_days)?.next_due_days || null };
+  };
+  if (client_id) info = await loadInfo(client_id).catch(() => null);
+  const nextSection = () => {
+    const s = info?.sub, c = info?.client;
+    if (!s || c?.billing_model === 'commission') return html`<p class="xs muted" style="margin:0">${c?.billing_model === 'commission' ? 'عميل بنظام نسبة — لا يوجد موعد دفعة ثابت.' : info ? 'لا يوجد اشتراك حالي لهذا العميل — أضف اشتراكًا لتحديد موعد الدفعة القادمة.' : ''}</p>`;
+    const manual = !!s.billing?.manual;
+    const mode = manual || !s.billing?.monthly && !s.billing?.amount_unset ? 'days' : 'auto';
+    const days = info.lastDays || s.billing?.cycle_days || 30;
+    const autoTxt = s.billing?.cycle_days ? `كل ${s.billing.cycle_days} يوم` : s.billing?.pay_day ? `يوم ${s.billing.pay_day} من كل شهر` : 'حسب جدول الاشتراك';
+    const at = c.pay_alert_time || state.settings.default_alert_time || '09:00';
+    const before = c.pay_alert_enabled ? (c.pay_alert_days ?? 1) : 1;
+    return html`<fieldset class="nd"><legend>${icon('calendar', 'sm')} موعد الدفعة القادمة</legend>
+      <input type="hidden" name="next_due_mode" value="${mode}">
+      <div class="seg" style="display:flex" data-nd-mode>
+        <button type="button" class="grow ${mode === 'days' ? 'active' : ''}" data-m="days">بعد عدد أيام</button>
+        <button type="button" class="grow ${mode === 'date' ? 'active' : ''}" data-m="date">تاريخ محدد</button>
+        ${!manual && (s.billing?.monthly || s.billing?.amount_unset) ? html`<button type="button" class="grow ${mode === 'auto' ? 'active' : ''}" data-m="auto">تلقائي</button>` : ''}</div>
+      <div data-nd="days" class="${mode === 'days' ? '' : 'hidden'}" style="margin-top:10px">
+        <div class="chips" style="flex-wrap:wrap" data-day-chips>${DAY_CHIPS.map((n) => html`<button type="button" class="chip ${n === days ? 'active' : ''}" data-days="${n}">${n} يوم</button>`)}
+          <label class="row" style="gap:6px;align-items:center"><span class="small muted">أو</span><input type="number" name="next_due_days" min="1" max="365" value="${days}" style="width:90px;min-height:38px;padding:4px 10px"><span class="small muted">يوم</span></label></div></div>
+      <div data-nd="date" class="${mode === 'date' ? '' : 'hidden'}" style="margin-top:10px">${inp('next_due_date', '', { type: 'date' })}</div>
+      <div data-nd="auto" class="${mode === 'auto' ? '' : 'hidden'}" style="margin-top:10px"><p class="small muted" style="margin:0">يُحسب حسب جدول الاشتراك: ${autoTxt}</p></div>
+      <div class="nd-preview" data-nd-preview></div>
+      <div class="nd-alert">
+        <label class="check"><input type="checkbox" name="alert_enabled" ${c.pay_alert_enabled || !manual ? raw('checked') : ''}> تنبيهي بهذه الدفعة</label>
+        <div class="grid-2" style="margin-top:8px">
+          <label class="field"><span>التنبيه قبل الموعد</span>${sel('alert_days', [{ v: 0, l: 'يوم الاستحقاق فقط' }, { v: 1, l: 'قبل يوم' }, { v: 2, l: 'قبل يومين' }, { v: 3, l: 'قبل 3 أيام' }, { v: 5, l: 'قبل 5 أيام' }, { v: 7, l: 'قبل 7 أيام' }], before)}</label>
+          <label class="field"><span>وقت التنبيه</span>${inp('alert_time', at, { type: 'time' })}</label></div>
+        <p class="xs muted" style="margin:6px 0 0">يصلك تنبيه قبل الموعد، ويوم الاستحقاق، وتذكير إذا تأخر العميل حتى تسجّل الدفعة.</p></div>
+    </fieldset>`;
+  };
+  return formSheet({
+    title: 'تسجيل دفعة جديدة',
+    body: html`${client_id ? '' : field('العميل *', await clientOptions(client_id))}
+      ${remaining ? html`<div class="badge b-gold" style="justify-self:start">المستحق حاليًا: ${moneyText(remaining)}</div>` : ''}
+      ${next_due ? html`<div class="badge b-blue" style="justify-self:start">الموعد الحالي ${date(next_due)}${amount_due ? `: ${moneyText(amount_due)}` : ''}</div>` : ''}
+      <div class="form-grid cols-2">
+        ${field('مبلغ الدفعة *', inp('amount', remaining || amount_due || '', { type: 'number', step: 'any', min: 0, req: true }))}
+        ${field('تاريخ استلام الدفعة', inp('date', today(), { type: 'date', req: true, attrs: `max="${today()}"` }))}
+      </div>
+      <div data-next-box>${nextSection()}</div>
+      ${field('ملاحظات (اختياري)', ta('notes', '', '', 2))}
+      <details class="more"><summary class="small muted" style="cursor:pointer">تفاصيل إضافية (طريقة الدفع، النوع، المرجع)</summary>
+        <div class="form-grid cols-2" style="margin-top:10px">
+          ${field('طريقة الدفع', sel('method', PAY_METHODS, 'transfer'))}
+          ${field('نوع الدفعة', sel('type', PAY_TYPES, commission ? 'commission' : 'subscription'))}
+          ${field('الفترة التي تغطيها', inp('period', '', { ph: 'مثال: نوفمبر 2026' }))}
+          ${field('رقم مرجع', inp('reference', ''))}</div></details>`,
+    submit: 'حفظ الدفعة',
+    onMount: (el, _close, form) => {
+      const box = el.querySelector('[data-next-box]');
+      const preview = () => {
+        const pv = el.querySelector('[data-nd-preview]'); if (!pv) return;
+        const mode = form.next_due_mode?.value, base = form.date.value || today();
+        let d = null, txt = '';
+        if (mode === 'days') { const n = Number(form.next_due_days.value); if (n > 0) { d = addDays(base, n); txt = `بعد ${n} يوم من تاريخ الاستلام`; } }
+        else if (mode === 'date') { d = form.next_due_date.value || null; if (d) txt = d <= base ? '⚠️ يجب أن يكون بعد تاريخ الاستلام' : `بعد ${diffDays(base, d)} يوم من تاريخ الاستلام`; }
+        pv.innerHTML = mode === 'auto' ? '' : d ? String(html`<span class="small muted">الدفعة القادمة</span><b>${date(d)}</b><span class="xs muted">${txt}</span>`) : String(html`<span class="small muted">اختر ${mode === 'date' ? 'التاريخ' : 'عدد الأيام'}</span>`);
+      };
+      const bind = () => {
+        el.querySelector('[data-nd-mode]')?.addEventListener('click', (e) => {
+          const b = e.target.closest('[data-m]'); if (!b) return;
+          form.next_due_mode.value = b.dataset.m;
+          el.querySelectorAll('[data-m]').forEach((x) => x.classList.toggle('active', x === b));
+          el.querySelectorAll('[data-nd]').forEach((x) => x.classList.toggle('hidden', x.dataset.nd !== b.dataset.m));
+          preview();
+        });
+        el.querySelector('[data-day-chips]')?.addEventListener('click', (e) => {
+          const b = e.target.closest('[data-days]'); if (!b) return;
+          form.next_due_days.value = b.dataset.days; el.querySelectorAll('[data-days]').forEach((x) => x.classList.toggle('active', x === b)); preview();
+        });
+        form.next_due_days?.addEventListener('input', () => { el.querySelectorAll('[data-days]').forEach((x) => x.classList.toggle('active', x.dataset.days === form.next_due_days.value)); preview(); });
+        form.next_due_date?.addEventListener('input', preview);
+        preview();
+      };
+      form.date.addEventListener('input', preview);
+      bind();
+      form.client_id?.addEventListener('change', async () => {
+        info = await loadInfo(form.client_id.value).catch(() => null);
+        box.innerHTML = String(nextSection()); bind();
+        if (info?.sub?.amount_due && !form.amount.value) form.amount.value = info.sub.amount_due;
+      });
+    },
     onSubmit: async (d) => {
-      const r = editing ? await put(`/api/payments/${p.id}`, d) : await post(`/api/clients/${d.client_id || client_id}/payments`, d);
-      toast(editing ? 'تم تعديل الدفعة' : 'تم تسجيل الدفعة'); return r;
+      const cid = d.client_id || client_id;
+      const body = { amount: d.amount, date: d.date, notes: d.notes, method: d.method, type: d.type, period: d.period, reference: d.reference };
+      if (d.next_due_mode && d.type === 'subscription') {
+        body.next_due_mode = d.next_due_mode;
+        if (d.next_due_mode === 'days') body.next_due_days = d.next_due_days;
+        if (d.next_due_mode === 'date') body.next_due_date = d.next_due_date;
+        body.alert = { enabled: !!d.alert_enabled, days: Number(d.alert_days), time: d.alert_time };
+      }
+      const r = await post(`/api/clients/${cid}/payments`, body);
+      toast(r.next_due ? `تم تسجيل الدفعة — الدفعة القادمة ${date(r.next_due)}` : 'تم تسجيل الدفعة');
+      return r;
     },
   });
 }
@@ -255,17 +354,31 @@ export async function subscriptionForm({ client, sub, renew } = {}) {
   });
 }
 
+export async function nextDueForm(client, sub) {
+  const cur = sub?.next_due || '';
+  return formSheet({
+    title: 'تعديل موعد الدفعة القادمة', submit: 'حفظ الموعد',
+    body: html`<p class="small muted" style="margin:0">يتغير موعد الاستحقاق والتنبيه المرتبط به فقط — لا تتأثر الدفعات المسجلة.</p>
+      ${cur ? html`<div class="badge b-blue" style="justify-self:start">الموعد الحالي: ${date(cur)}</div>` : ''}
+      ${field('الموعد الجديد', inp('date', cur && cur >= today() ? cur : addDays(today(), 7), { type: 'date', req: true }))}
+      <div class="chips" data-q>${[3, 7, 15, 30].map((n) => html`<button type="button" class="chip" data-n="${n}">بعد ${n} يوم من اليوم</button>`)}</div>
+      ${sub?.billing?.manual && (sub.billing.monthly || sub.billing.amount_unset) ? html`<label class="check"><input type="checkbox" name="reset"> الرجوع للجدول التلقائي للاشتراك</label>` : ''}`,
+    onMount: (el, _c, form) => el.querySelector('[data-q]').addEventListener('click', (e) => { const b = e.target.closest('[data-n]'); if (b) form.date.value = addDays(today(), Number(b.dataset.n)); }),
+    onSubmit: async (d) => { const r = await put(`/api/subscriptions/${sub.id}/next-due`, { date: d.reset ? null : d.date }); toast(r.next_due ? `الموعد الجديد ${date(r.next_due)}` : 'تم'); return r; },
+  });
+}
+
 export async function alertForm(client) {
-  const days = [1, 3, 5, 7, 10, 15];
-  const cur = client.pay_alert_days || state.settings.default_pay_alert_days || 3;
+  const days = [0, 1, 3, 5, 7, 10, 15];
+  const cur = client.pay_alert_days ?? state.settings.default_pay_alert_days ?? 3;
   return formSheet({
     title: `تنبيه الدفع — ${client.name}`, submit: 'حفظ',
     body: html`<label class="check" style="font-size:16px"><input type="checkbox" name="pay_alert_enabled" ${client.pay_alert_enabled ? raw('checked') : ''}> تفعيل تنبيه قبل موعد الدفع</label>
-      ${field('التنبيه قبل موعد الدفع بـ', html`<div class="chips" style="flex-wrap:wrap" data-days>${days.map((x) => html`<button type="button" class="chip ${x === cur ? 'active' : ''}" data-d="${x}">${x === 1 ? 'يوم' : `${x} أيام`}</button>`)}</div>`)}
-      ${field('أو عدد أيام مخصص', inp('pay_alert_days', cur, { type: 'number', min: 1, attrs: 'max="90"' }))}
+      ${field('التنبيه قبل موعد الدفع بـ', html`<div class="chips" style="flex-wrap:wrap" data-days>${days.map((x) => html`<button type="button" class="chip ${x === cur ? 'active' : ''}" data-d="${x}">${x === 0 ? 'يوم الاستحقاق فقط' : x === 1 ? 'يوم' : `${x} أيام`}</button>`)}</div>`)}
+      <div class="grid-2">${field('أو عدد أيام مخصص', inp('pay_alert_days', cur, { type: 'number', min: 0, attrs: 'max="90"' }))}${field('وقت التنبيه', inp('pay_alert_time', client.pay_alert_time || state.settings.default_alert_time || '09:00', { type: 'time' }))}</div>
       <p class="xs muted" style="margin:0">يظهر التنبيه في الرئيسية وصفحة الدفعات القادمة من بداية الفترة، ويبقى ظاهرًا حتى تسجيل الدفعة. وإذا فعّلت إشعارات الجوال من الإعدادات يصلك ملخص يومي.</p>`,
     onMount: (el) => el.querySelector('[data-days]').addEventListener('click', (e) => { const b = e.target.closest('[data-d]'); if (!b) return; el.querySelector('[name=pay_alert_days]').value = b.dataset.d; el.querySelectorAll('[data-d]').forEach((x) => x.classList.toggle('active', x === b)); }),
-    onSubmit: async (d) => { await put(`/api/clients/${client.id}`, { pay_alert_enabled: d.pay_alert_enabled, pay_alert_days: d.pay_alert_days }); toast('تم حفظ إعداد التنبيه'); return true; },
+    onSubmit: async (d) => { await put(`/api/clients/${client.id}`, { pay_alert_enabled: d.pay_alert_enabled, pay_alert_days: d.pay_alert_days, pay_alert_time: d.pay_alert_time }); toast('تم حفظ إعداد التنبيه'); return true; },
   });
 }
 

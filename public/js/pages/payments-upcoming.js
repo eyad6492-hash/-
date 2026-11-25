@@ -1,7 +1,7 @@
 import { html, icon, mount, money, moneyText, logo, date, empty, relDays } from '../ui.js';
 import { get } from '../api.js';
 import { can, setTitle, refresh } from '../app.js';
-import { PAY_STATUS, SUB_STATUS } from '../shared.js';
+import { PAY_STATUS, SUB_STATUS, dueLabel } from '../shared.js';
 import { paymentForm } from '../forms.js';
 import { PAY_BADGE, waLink } from './client.js';
 
@@ -33,7 +33,7 @@ export default async function upcomingPage(main, _p, q, stale) {
     const r = items.filter(match[filter]);
     mount(main.querySelector('[data-list]'), r.length ? r.map((x) => html`<div class="card flat" style="padding:12px" data-id="${x.client_id}">
       <div class="row">${logo(x)}<div class="grow" style="min-width:0"><div class="bold ellipsis">${x.name}</div><div class="xs muted ellipsis">${[x.store_name, x.phone].filter(Boolean).join(' • ') || '—'}</div></div>
-        <span class="badge ${PAY_BADGE[x.status]}">${PAY_STATUS[x.status]}${x.partial ? ' • جزئي' : ''}</span></div>
+        <span class="badge ${PAY_BADGE[x.status]}">${x.status === 'frozen' ? PAY_STATUS.frozen : dueLabel(x.status, x.days_to_due)}${x.partial ? ' • جزئي' : ''}</span></div>
       <div class="grid-3" style="margin-top:10px;text-align:center">
         <div><div class="xs muted">الاشتراك${x.cycle_days ? ` / ${x.cycle_days} يوم` : x.monthly ? ' الشهري' : ''}</div><div class="bold">${x.amount_unset ? html`<span style="color:var(--gold)">غير محدد</span>` : money(x.monthly ?? x.one_time_amount, 0)}</div></div>
         <div><div class="xs muted">المدفوع</div><div class="bold" style="color:#4ade80">${x.amount_unset || x.current_paid == null ? '—' : money(x.current_paid, 0)}</div></div>

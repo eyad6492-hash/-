@@ -33,7 +33,7 @@ export function deriveSub(ctx, sub, paid, client) {
   if (!sub) return null;
   const s = ctx.settings, today = ctx.today;
   const open = sub.sub_type === 'open';
-  const soonDays = client?.pay_alert_enabled ? Number(client.pay_alert_days) || 3 : Number(s.due_soon_days) || 3;
+  const soonDays = client?.pay_alert_enabled && Number(client.pay_alert_days) > 0 ? Number(client.pay_alert_days) : Number(s.due_soon_days) || 3;
   const bill = computeBilling(sub, paid, today, { grace: Number(s.payment_grace_days) || 0, soonDays });
   const days_left = open ? null : diffDays(today, sub.end_date);
   const amount = Number(sub.amount) || 0;
@@ -73,6 +73,6 @@ function derive(ctx, c, sub, paid, extra) {
     ...c,
     category_ids: parseArr(c.category_ids), tags: parseArr(c.tags), platforms: parseArr(c.platforms),
     other_links: parseArr(c.other_links), custom_fields: parseArr(c.custom_fields),
-    sub: d, flags, status_display, billing_model: c.billing_model || 'subscription', tenure: tenure(c.start_date, ctx.today), pay_alert_enabled: !!c.pay_alert_enabled, ...extra,
+    sub: d, flags, status_display, pay_alert_time: c.pay_alert_time || null, billing_model: c.billing_model || 'subscription', tenure: tenure(c.start_date, ctx.today), pay_alert_enabled: !!c.pay_alert_enabled, ...extra,
   };
 }

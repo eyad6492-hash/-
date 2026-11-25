@@ -61,8 +61,9 @@ export default async function settingsPage(main, _p, _q, stale) {
       <div class="row"><input data-new-q placeholder="بند جديد…"><button type="button" class="btn sm" data-add-q>${icon('plus', 'sm')}</button></div>${saveBtn('quick')}</form>`) : ''}
 
     ${sec('push', 'bell', 'إشعارات الجوال والتنبيهات', html`<div class="stack">
-      ${admin ? html`<form class="form-grid" data-form="alerts"><div class="grid-2">${field('«قريب الاستحقاق» قبل الدفع بـ (يوم)', inp('due_soon_days', s.due_soon_days, { type: 'number', min: 1 }))}${field('مدة التنبيه الافتراضية للعملاء (يوم)', inp('default_pay_alert_days', s.default_pay_alert_days, { type: 'number', min: 1 }))}</div>${saveBtn('alerts')}</form>` : ''}
-      <p class="small" style="margin:0">تنبيهات الدفع والتجارب تظهر دائمًا داخل التطبيق (الرئيسية والدفعات القادمة). ويمكنك أيضًا استلام <b>ملخص يومي على جوالك الساعة 8 صباحًا</b> بعد تفعيل الإشعارات على هذا الجهاز:</p>
+      ${admin ? html`<form class="form-grid" data-form="alerts"><div class="grid-2">${field('«قريب الاستحقاق» قبل الدفع بـ (يوم)', inp('due_soon_days', s.due_soon_days, { type: 'number', min: 1 }))}${field('مدة التنبيه الافتراضية للعملاء (يوم)', inp('default_pay_alert_days', s.default_pay_alert_days, { type: 'number', min: 0 }))}
+        ${field('وقت التنبيه الافتراضي', inp('default_alert_time', s.default_alert_time || '09:00', { type: 'time' }))}${field('تذكير التأخر كل (يوم)', inp('late_reminder_every_days', s.late_reminder_every_days ?? 2, { type: 'number', min: 1 }))}</div>${saveBtn('alerts')}</form>` : ''}
+      <p class="small" style="margin:0">تنبيهات الدفع والتجارب تظهر دائمًا داخل التطبيق (الرئيسية والدفعات القادمة). ويمكنك أيضًا استلامها على جوالك: <b>تنبيهات الدفعات في الوقت المحدد لكل عميل، وملخص يومي في الوقت الافتراضي</b> بعد تفعيل الإشعارات على هذا الجهاز:</p>
       <div class="row small"><span class="badge b-gray" data-push-state>جارٍ التحقق…</span></div>
       <div class="grid-2"><button class="btn primary" data-push-on>${icon('bell')} تفعيل على هذا الجهاز</button><button class="btn ghost" data-push-test>${icon('send')} إرسال إشعار تجريبي</button></div>
       <button class="btn sm ghost" data-push-off>إيقاف الإشعارات على هذا الجهاز</button>

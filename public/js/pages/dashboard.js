@@ -1,4 +1,5 @@
-import { html, raw, icon, mount, money, n, logo, monthName, dateShort, empty, toast, $ } from '../ui.js';
+import { html, raw, icon, mount, money, n, logo, monthName, date, dateShort, empty, toast, $ } from '../ui.js';
+import { dueLabel } from '../shared.js';
 import { get, put } from '../api.js';
 import { state, can, setTitle, setBell, go, avatarSrc } from '../app.js';
 import { chart, donut } from '../charts.js';
@@ -54,6 +55,11 @@ export default async function dashboard(main, _p, _q, stale) {
     ${d.alerts.length ? html`<div class="section card"><div class="section-head"><h3>${icon('bell', 'sm')} تنبيهات مهمة</h3><span class="badge b-pink">${d.alerts.length}</span></div>
       <div class="stack" style="gap:6px">${d.alerts.slice(0, 10).map((a) => html`<div class="alert-item" data-link="${a.link || (a.campaign_id ? `#/campaigns/${a.campaign_id}` : a.client_id ? `#/clients/${a.client_id}` : '#/')}"><span class="lv lv-${a.level}"></span><span class="grow">${a.text}</span>${icon('chevL', 'sm')}</div>`)}
       ${d.alerts.length > 10 ? html`<button class="btn sm ghost" data-more-alerts>عرض كل التنبيهات (${d.alerts.length})</button>` : ''}</div></div>` : ''}
+
+    ${money_ok && d.upcoming?.length ? html`<div class="section card"><div class="section-head"><h3>${icon('wallet', 'sm')} الدفعات القادمة</h3><a href="#/payments/upcoming">عرض الكل</a></div>
+      <div class="stack" style="gap:6px">${d.upcoming.map((u) => html`<a class="up-row st-${u.status}" href="#/clients/${u.client_id}?tab=payments">
+        <span class="up-dot"></span><div class="grow" style="min-width:0"><div class="bold ellipsis">${u.name}</div><div class="xs muted">${date(u.next_due)} • ${u.days_to_due > 0 ? `بعد ${u.days_to_due} يوم` : u.days_to_due === 0 ? 'اليوم' : `منذ ${-u.days_to_due} يوم`}</div></div>
+        <div style="text-align:left"><div class="bold num">${u.amount_due ? n(u.amount_due, 0) : '—'}</div><span class="up-badge">${dueLabel(u.status, u.days_to_due)}</span></div></a>`)}</div></div>` : ''}
 
     <div class="section"><div class="section-head"><h3>المتابعة والدفعات والتجارب</h3></div>
       <div class="tiles">

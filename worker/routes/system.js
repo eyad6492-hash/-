@@ -134,7 +134,8 @@ export const systemRoutes = {
       .map((c) => ({ id: c.id, name: c.name, store_name: c.store_name, logo: c.logo, platforms: c.platforms, campaigns: c.campaigns_active }));
     const { results: tasks } = await db.prepare("SELECT t.id, t.title, t.priority, t.due_date, t.client_id, c.name client_name FROM tasks t LEFT JOIN clients c ON c.id = t.client_id WHERE t.due_date <= ? AND t.status NOT IN ('done','cancelled') ORDER BY t.due_date, CASE t.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END LIMIT 30").bind(t).all();
     const followedToday = (await one('SELECT COUNT(DISTINCT client_id) n FROM followups WHERE date = ?', t)).n;
-    return json({ today: t, stats, alerts: alerts.slice(0, 60), review, tasks, followed_today: followedToday });
+    const upcoming = up.filter((r) => r.next_due && r.status !== 'frozen').slice(0, 8).map((r) => ({ client_id: r.client_id, name: r.name, next_due: r.next_due, days_to_due: r.days_to_due, amount_due: r.status === 'late' ? r.owed_now || r.amount_due : r.amount_due, status: r.status }));
+    return json({ today: t, stats, alerts: alerts.slice(0, 60), review, tasks, followed_today: followedToday, upcoming });
   },
 
   'GET /api/dashboard/charts': async (ctx) => {

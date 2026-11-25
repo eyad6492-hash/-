@@ -43,7 +43,7 @@ export function upcomingRows(clients) {
       subscription_id: c.sub.id, sub_type: c.sub.sub_type, sub_state: c.sub.state, monthly: c.sub.billing.monthly, one_time_amount: c.sub.billing.monthly ? null : c.sub.amount,
       cycle_days: c.sub.billing.cycle_days, amount_unset: c.sub.billing.amount_unset, period_paid: c.sub.billing.period_paid, current_paid: c.sub.billing.current_paid ?? null, amount_due: c.sub.amount_due, owed_now: c.sub.remaining,
       periods_due: c.sub.billing.periods_due, next_due: c.sub.next_due, days_to_due: c.sub.days_to_due, status: c.sub.pay_status, partial: c.sub.partial,
-      last_payment: c.last_payment, pay_alert: c.sub.pay_alert, pay_alert_enabled: c.pay_alert_enabled, pay_alert_days: c.pay_alert_days,
+      last_payment: c.last_payment, pay_alert: c.sub.pay_alert, pay_alert_enabled: c.pay_alert_enabled, pay_alert_days: c.pay_alert_days, pay_alert_time: c.pay_alert_time, manual: !!c.sub.billing.manual, days_late: c.sub.billing.days_late || 0,
     }))
     .sort((a, b) => (a.status === 'frozen') - (b.status === 'frozen') || (a.next_due || '9999').localeCompare(b.next_due || '9999'));
 }
@@ -209,6 +209,15 @@ export const v11Routes = {
     return json({ results: out });
   },
   'GET /api/push/preview': async (ctx) => json({ lines: await dailyDigestLines(ctx, ctx.perms) }),
+  // Owner tools for alerts: preview (dry run) or run now for a given instant.
+  'POST /api/alerts/run': async (ctx) => {
+    if (ctx.user.role !== 'owner') throw new HttpError(403, 'للمالك فقط');
+    const b = await readJson(ctx.req);
+    ctx.origin = ctx.url.origin;
+    const at = b.at ? new Date(b.at) : new Date();
+    if (Number.isNaN(at.getTime())) throw bad('وقت غير صالح');
+    return json(await runAlerts(ctx, { at, dry: !!b.dry }));
+  },
 };
 
 /** Lines of the daily summary for a user with the given permissions. */
@@ -238,18 +247,69 @@ export async function dailyDigestLines(ctx, perms) {
   return lines;
 }
 
-/** Cron: sends each subscribed user a daily summary of what needs attention. */
-export async function runDailyNotifications(ctx) {
+/** Local date + hour in the app time zone for an instant. */
+export function localClock(tz, at = new Date()) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: tz || 'Asia/Riyadh', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' }).formatToParts(at).map((p) => [p.type, p.value]));
+  return { date: `${parts.year}-${parts.month}-${parts.day}`, hour: Number(parts.hour) };
+}
+
+/**
+ * Payment alert events for one client on a given local date:
+ * before (N days ahead), due (the day itself), late (day 1 after, then every K days until paid).
+ */
+export function paymentAlertEvents(row, date, settings) {
+  if (!row.pay_alert_enabled || !row.next_due || row.status === 'frozen') return [];
+  const ev = [], d = diffDays(date, row.next_due);
+  const amt = row.amount_due ? ` بمبلغ ${row.amount_due} ريال` : '';
+  if (row.pay_alert_days > 0 && d === row.pay_alert_days) ev.push({ kind: 'before', title: `دفعة قادمة: ${row.name}`, body: `موعد دفعة ${row.name} بعد ${d} ${d === 1 ? 'يوم' : 'أيام'} (${row.next_due})${amt}` });
+  if (d === 0) ev.push({ kind: 'due', title: `دفعة مستحقة اليوم: ${row.name}`, body: `اليوم موعد دفعة ${row.name}${amt}` });
+  const every = Math.max(1, Number(settings.late_reminder_every_days) || 2);
+  if (d < 0 && (-d - 1) % every === 0) ev.push({ kind: 'late', title: `دفعة متأخرة: ${row.name}`, body: `${row.name} متأخر ${-d} ${-d === 1 ? 'يوم' : 'أيام'} عن موعد ${row.next_due}${amt} — لم تُسجَّل الدفعة بعد` });
+  return ev.map((e) => ({ ...e, client_id: row.client_id, due: row.next_due, time: row.pay_alert_time || settings.default_alert_time || '09:00', key: `pay|${row.client_id}|${row.next_due}|${e.kind}|${date}` }));
+}
+
+/**
+ * Hourly cron: sends payment alerts at each client's alert time and one daily digest (trials, tasks) at the
+ * default time. Every notification is recorded in alert_log first, so it is never sent twice.
+ * `at` / `dry` are used by tests and the preview endpoint.
+ */
+export async function runAlerts(ctx, { at = new Date(), dry = false } = {}) {
+  const s = ctx.settings, clock = localClock(s.timezone, at);
+  const hourOf = (t) => Number(String(t || '09:00').slice(0, 2));
+  const savedToday = ctx.today; ctx.today = clock.date;
+  const rows = upcomingRows(await loadClientsDerived(ctx, "WHERE status != 'former'"));
+  ctx.today = savedToday;
+  const payEvents = rows.flatMap((r) => paymentAlertEvents(r, clock.date, s)).filter((e) => hourOf(e.time) === clock.hour);
   const { results: subs } = await ctx.env.DB.prepare('SELECT p.*, u.role, u.permissions, u.active FROM push_subscriptions p JOIN users u ON u.id = p.user_id').all();
   const byUser = {};
-  for (const s of subs) if (s.active) (byUser[s.user_id] ||= { user: s, subs: [] }).subs.push(s);
-  let sent = 0;
-  for (const { user, subs: list } of Object.values(byUser)) {
-    const lines = await dailyDigestLines(ctx, userPerms(user));
-    if (!lines.length) continue;
-    const msg = { title: `تنبيهات اليوم (${lines.length})`, body: lines.slice(0, 6).join('\n'), url: '/#/payments/upcoming' };
-    for (const s of list) { if ((await sendPush(ctx.env, s, msg, ctx.origin).catch(() => 'error')) === 'ok') sent++; }
+  for (const sb of subs) if (sb.active) (byUser[sb.user_id] ||= { user: sb, subs: [] }).subs.push(sb);
+  const out = { date: clock.date, hour: clock.hour, sent: [], skipped_duplicates: 0 };
+  const claim = async (key) => {
+    if (dry) return !(await ctx.env.DB.prepare('SELECT 1 FROM alert_log WHERE key = ?').bind(key).first());
+    const r = await ctx.env.DB.prepare('INSERT OR IGNORE INTO alert_log (key, sent_at) VALUES (?, ?)').bind(key, new Date().toISOString()).run();
+    return r.meta.changes === 1;
+  };
+  for (const e of payEvents) {
+    if (!(await claim(e.key))) { out.skipped_duplicates++; continue; }
+    out.sent.push({ kind: e.kind, client_id: e.client_id, due: e.due, title: e.title });
+    if (dry) continue;
+    for (const { user, subs: list } of Object.values(byUser)) {
+      if (!userPerms(user).has('payments.view')) continue;
+      for (const sb of list) await sendPush(ctx.env, sb, { title: e.title, body: e.body, url: `/#/clients/${e.client_id}?tab=payments`, tag: `pay-${e.client_id}` }, ctx.origin).catch(() => 'error');
+    }
   }
-  return sent;
+  if (hourOf(s.default_alert_time) === clock.hour) {
+    for (const { user, subs: list } of Object.values(byUser)) {
+      const perms = userPerms(user);
+      const lines = (await dailyDigestLines(ctx, perms)).filter((l) => !l.startsWith('💳'));
+      if (!lines.length || !(await claim(`digest|${user.user_id}|${clock.date}`))) continue;
+      out.sent.push({ kind: 'digest', user_id: user.user_id });
+      if (!dry) for (const sb of list) await sendPush(ctx.env, sb, { title: `ملخص اليوم (${lines.length})`, body: lines.slice(0, 6).join('\n'), url: '/#/', tag: 'mbcc-digest' }, ctx.origin).catch(() => 'error');
+    }
+  }
+  if (!dry) await ctx.env.DB.prepare('DELETE FROM alert_log WHERE sent_at < ?').bind(new Date(Date.now() - 120 * 864e5).toISOString()).run();
+  return out;
 }
+export const runDailyNotifications = (ctx) => runAlerts(ctx).then((r) => r.sent.length);
+
 export { PAY_STATUS };

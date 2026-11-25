@@ -379,14 +379,14 @@ async function main() {
     const id = ok(await owner('POST', '/api/clients', { name: 'دورة 15', subscription: { sub_type: 'open', monthly_amount: 2500, cycle_days: 15, start_date: addD(today, -18), first_due_date: addD(today, -18) } }), 'c').id;
     ok(await owner('POST', `/api/clients/${id}/payments`, { amount: 2500, date: addD(today, -18) }), 'p');
     const d = ok(await owner('GET', `/api/clients/${id}`), 'g');
-    assert.equal(d.client.sub.next_due, addD(today, -3)); assert.equal(d.client.sub.pay_status, 'due'); assert.equal(d.client.sub.amount_due, 2500);
+    assert.equal(d.client.sub.next_due, addD(today, -3)); assert.equal(d.client.sub.pay_status, 'late'); assert.equal(d.client.sub.amount_due, 2500);
     ok(await owner('POST', `/api/clients/${id}/payments`, { amount: 2500 }), 'p2');
     assert.equal(ok(await owner('GET', `/api/clients/${id}`), 'g').client.sub.next_due, addD(today, 12));
   });
   await test('اشتراك مفتوح بدون مبلغ محدد لا يُفترض له مبلغ', async () => {
     const id = ok(await owner('POST', '/api/clients', { name: 'بدون مبلغ', subscription: { sub_type: 'open', start_date: addD(today, -2), first_due_date: addD(today, -2) } }), 'c').id;
     const d = ok(await owner('GET', `/api/clients/${id}`), 'g');
-    assert.equal(d.client.sub.billing.amount_unset, true); assert.equal(d.client.sub.amount_due, null); assert.equal(d.client.sub.remaining, 0); assert.equal(d.client.sub.pay_status, 'due');
+    assert.equal(d.client.sub.billing.amount_unset, true); assert.equal(d.client.sub.amount_due, null); assert.equal(d.client.sub.remaining, 0); assert.equal(d.client.sub.pay_status, 'late');
     const up = ok(await owner('GET', '/api/payments/upcoming'), 'u').items.find((x) => x.client_id === id); assert.ok(up && up.amount_unset);
   });
   await test('العميل المجمد بدون استحقاق نشط', async () => {
@@ -428,6 +428,69 @@ async function main() {
     h = ok(await owner('GET', `/api/clients/${cid}/quick-checks`), 'h'); assert.deepEqual(h.items.map((x) => x.date), [addD(today, -1)]);
     assert.equal((await owner('PUT', `/api/clients/${cid}/quick-check`, { checked: true, date: addD(today, 1) })).status, 400);
     const dash = ok(await owner('GET', '/api/dashboard'), 'd'); assert.equal(typeof dash.stats.quick_checked, 'number');
+  });
+
+  console.log('\nv1.4 — موعد الدفعة القادمة المرن والتنبيهات');
+  let fx, fxSub;
+  await test('دفعة بتاريخ اليوم والقادمة بعد 7 / 15 / 30 يومًا', async () => {
+    fx = ok(await owner('POST', '/api/clients', { name: 'مرن', pay_alert_enabled: true, subscription: { sub_type: 'open', monthly_amount: 1000, start_date: addD(today, -10), first_due_date: addD(today, -10) } }), 'c').id;
+    for (const n of [7, 15, 30]) {
+      const r = ok(await owner('POST', `/api/clients/${fx}/payments`, { amount: 1000, date: today, next_due_mode: 'days', next_due_days: n }), 'p' + n);
+      assert.equal(r.next_due, addD(today, n));
+      const d = ok(await owner('GET', `/api/clients/${fx}`), 'g'); assert.equal(d.client.sub.next_due, addD(today, n)); assert.equal(d.payments[0].next_due_days, n);
+    }
+    const d = ok(await owner('GET', `/api/clients/${fx}`), 'g'); fxSub = d.client.sub.id;
+    assert.equal(d.payments.length, 3, 'old payments kept'); assert.equal(d.payments.find((p) => p.next_due_days === 7).next_due_date, addD(today, 7));
+    assert.equal(d.payments.find((p) => p.next_due_days === 15).prev_due_date, addD(today, 7), 'previous due recorded');
+  });
+  await test('حساب التاريخ من تاريخ الاستلام (25 نوفمبر + 15 = 10 ديسمبر)', async () => {
+    const id = ok(await owner('POST', '/api/clients', { name: 'مثال', subscription: { sub_type: 'open', monthly_amount: 500 } }), 'c').id;
+    const r = ok(await owner('POST', `/api/clients/${id}/payments`, { amount: 500, date: '2026-11-25' <= today ? '2026-11-25' : today, next_due_mode: 'days', next_due_days: 15 }), 'p');
+    if (today >= '2026-11-25') assert.equal(r.next_due, '2026-12-10');
+  });
+  await test('اختيار تاريخ مباشر ورفض تاريخ قبل الاستلام', async () => {
+    const r = ok(await owner('POST', `/api/clients/${fx}/payments`, { amount: 1000, date: today, next_due_mode: 'date', next_due_date: addD(today, 12) }), 'p');
+    assert.equal(r.next_due, addD(today, 12));
+    assert.equal((await owner('POST', `/api/clients/${fx}/payments`, { amount: 1, date: today, next_due_mode: 'date', next_due_date: addD(today, -1) })).status, 400);
+  });
+  await test('تعديل موعد الدفعة بدون تسجيل دفعة + سجل النشاط', async () => {
+    const before = ok(await owner('GET', `/api/clients/${fx}`), 'g').payments.length;
+    ok(await owner('PUT', `/api/subscriptions/${fxSub}/next-due`, { date: addD(today, 20) }), 'e');
+    const d = ok(await owner('GET', `/api/clients/${fx}`), 'g');
+    assert.equal(d.client.sub.next_due, addD(today, 20)); assert.equal(d.payments.length, before, 'no payment created');
+    assert.ok(d.activity.some((a) => a.action === 'تعديل موعد الدفعة القادمة'));
+  });
+  await test('التأخر: حالة متأخرة وعدد الأيام ولا دفعة تلقائية', async () => {
+    ok(await owner('PUT', `/api/subscriptions/${fxSub}/next-due`, { date: addD(today, -4) }), 'e');
+    const d = ok(await owner('GET', `/api/clients/${fx}`), 'g');
+    assert.equal(d.client.sub.pay_status, 'late'); assert.equal(d.client.sub.billing.days_late, 4); assert.equal(d.client.sub.remaining, 1000);
+    const up = ok(await owner('GET', '/api/payments/upcoming'), 'u').items.find((x) => x.client_id === fx);
+    assert.equal(up.status, 'late'); assert.equal(up.days_late, 4);
+    const { dueLabel } = await import('../public/js/shared.js'); assert.equal(dueLabel('late', -4), 'متأخرة 4 أيام');
+  });
+  await test('التنبيهات: قبل / يوم الاستحقاق / متأخرة — وعدم التكرار', async () => {
+    ok(await owner('PUT', `/api/clients/${fx}`, { pay_alert_enabled: true, pay_alert_days: 3, pay_alert_time: '09:00' }), 'a');
+    ok(await owner('PUT', `/api/subscriptions/${fxSub}/next-due`, { date: addD(today, 3) }), 'e');
+    const at9 = (d) => new Date(`${d}T06:00:00Z`).toISOString(); // 09:00 Riyadh
+    let r = ok(await owner('POST', '/api/alerts/run', { at: at9(today) }), 'run');
+    assert.ok(r.sent.some((x) => x.client_id === fx && x.kind === 'before'));
+    r = ok(await owner('POST', '/api/alerts/run', { at: at9(today) }), 'run2');
+    assert.ok(!r.sent.some((x) => x.client_id === fx), 'no duplicate'); assert.ok(r.skipped_duplicates >= 1);
+    const other = ok(await owner('POST', '/api/alerts/run', { at: new Date(`${today}T09:00:00Z`).toISOString(), dry: true }), 'noon');
+    assert.ok(!other.sent.some((x) => x.client_id === fx), 'only at the alert hour');
+    r = ok(await owner('POST', '/api/alerts/run', { at: at9(addD(today, 3)), dry: true }), 'due');
+    assert.ok(r.sent.some((x) => x.client_id === fx && x.kind === 'due'));
+    r = ok(await owner('POST', '/api/alerts/run', { at: at9(addD(today, 4)), dry: true }), 'late');
+    assert.ok(r.sent.some((x) => x.client_id === fx && x.kind === 'late'));
+  });
+  await test('تسجيل دفعة جديدة يُنهي التنبيه القديم وينشئ تنبيهًا للموعد الجديد', async () => {
+    const at9 = (d) => new Date(`${d}T06:00:00Z`).toISOString();
+    ok(await owner('POST', `/api/clients/${fx}/payments`, { amount: 1000, date: today, next_due_mode: 'days', next_due_days: 15, alert: { enabled: true, days: 1, time: '10:00' } }), 'p');
+    let r = ok(await owner('POST', '/api/alerts/run', { at: at9(addD(today, 3)), dry: true }), 'old due');
+    assert.ok(!r.sent.some((x) => x.client_id === fx), 'old alert no longer fires');
+    r = ok(await owner('POST', '/api/alerts/run', { at: new Date(`${addD(today, 14)}T07:00:00Z`).toISOString(), dry: true }), 'new');
+    assert.ok(r.sent.some((x) => x.client_id === fx && x.kind === 'before' && x.due === addD(today, 15)), 'new alert at 10:00 one day before');
+    const d = ok(await owner('GET', `/api/clients/${fx}`), 'g'); assert.equal(d.client.pay_alert_time, '10:00'); assert.equal(d.client.pay_alert_days, 1);
   });
 
   console.log('\nلوحة التحكم والتقويم والبيانات التجريبية');

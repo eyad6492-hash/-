@@ -121,7 +121,8 @@ export const ROLES = {
 export const OPEN_END = '9999-12-31'; // stored end_date for open (no-expiry) subscriptions
 export const SUB_TYPES = { fixed: 'محدد المدة', open: 'اشتراك مفتوح / مستمر' };
 export const BILLING_MODES = { advance: 'مقدّم (أول الشهر)', arrears: 'بعد انتهاء الشهر' };
-PAY_STATUS.soon = 'قريب الاستحقاق';
+PAY_STATUS.soon = 'مستحق قريبًا';
+PAY_STATUS.due = 'مستحق اليوم';
 PAY_STATUS.frozen = 'مجمد — بدون استحقاق';
 PAY_TYPES.commission = 'نسبة / عمولة';
 export const BILLING_MODELS = { subscription: 'اشتراك', commission: 'نسبة / عمولة' };
@@ -210,10 +211,25 @@ export function computeBilling(sub, paid, today, { grace = 5, soonDays = 3 } = {
     out.period_paid = Math.min(paid, amount);
     out.current_paid = Math.min(paid, amount);
   }
+  // A next due date set manually (from a payment or edited) replaces the automatic schedule.
+  if (sub.next_due_override) {
+    const expected = monthly > 0 ? monthly : (!open && num(sub.amount)) || null;
+    out.manual = true; out.next_due = sub.next_due_override; out.amount_due = expected; out.partial = false;
+    const late = sub.next_due_override <= today;
+    out.owed_now = late && expected ? expected : 0; out.periods_due = sub.next_due_override < today ? 1 : 0;
+  }
   if (!out.next_due) { out.status = 'paid'; return out; }
   out.days_to_due = diffDays(today, out.next_due);
-  out.status = out.days_to_due < -grace ? 'late' : out.days_to_due <= 0 ? 'due' : out.days_to_due <= soonDays ? 'soon' : 'paid';
+  // late from the first day after the due date; due = today; soon = within the alert window
+  out.status = out.days_to_due < 0 ? 'late' : out.days_to_due === 0 ? 'due' : out.days_to_due <= soonDays ? 'soon' : 'paid';
+  out.days_late = out.days_to_due < 0 ? -out.days_to_due : 0;
   return out;
+}
+
+/** Arabic label for a payment's due state (dashboard / upcoming payments). */
+export function dueLabel(status, daysToDue) {
+  if (status === 'late') return `متأخرة ${-daysToDue} ${-daysToDue === 1 ? 'يوم' : -daysToDue === 2 ? 'يومين' : 'أيام'}`;
+  return { due: 'مستحقة اليوم', soon: 'مستحقة قريبًا', paid: 'تم استلامها', frozen: 'مجمد', none: '—' }[status] || status;
 }
 
 export function trialState(t, today) {

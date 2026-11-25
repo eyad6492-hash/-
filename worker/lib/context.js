@@ -21,6 +21,8 @@ export const SETTINGS_DEFAULTS = {
   checklist: DEFAULT_CHECKLIST,
   quick_checklist: DEFAULT_QUICK_CHECKLIST,
   due_soon_days: 3,
+  default_alert_time: '09:00',
+  late_reminder_every_days: 2,
   default_pay_alert_days: 3,
   followup_default_every: 1,
   task_default_priority: 'medium',

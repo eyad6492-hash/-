@@ -165,13 +165,13 @@ main.page { padding: 16px 16px calc(var(--nav-h) + 90px + var(--safe-b)); max-wi
 .btn.icon { width: 46px; padding: 0; } .btn.sm.icon { width: 36px; }
 
 label.field { display: grid; gap: 6px; font-size: 13px; color: var(--text-2); font-weight: 500; }
-.input, input:not([type]), input[type=text], input[type=password], input[type=email], input[type=tel], input[type=number], input[type=date], input[type=url], input[type=search], select, textarea {
+.input, input:not([type]), input[type=text], input[type=password], input[type=email], input[type=tel], input[type=number], input[type=date], input[type=time], input[type=url], input[type=search], select, textarea {
   width: 100%; min-height: 48px; padding: 11px 14px; border-radius: 14px; border: 1px solid var(--border-2); background: var(--surface); color: var(--text); outline: none; font-size: 15px; transition: border-color .15s, box-shadow .15s; }
 :root[data-theme="light"] input, :root[data-theme="light"] select, :root[data-theme="light"] textarea { background: #fff; }
 textarea { min-height: 92px; resize: vertical; line-height: 1.6; }
 input:focus, select:focus, textarea:focus { border-color: var(--pink); box-shadow: 0 0 0 3px rgba(255, 45, 120, .18); }
 input[type=number], input[type=tel], input[type=email], input[type=url] { direction: ltr; text-align: right; }
-input[type=date] { direction: ltr; text-align: right; }
+input[type=date], input[type=time] { direction: ltr; text-align: right; }
 select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239096bd' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: left 12px center; padding-left: 36px; }
 option { background: var(--bg-2); color: var(--text); }
 .form-grid { display: grid; gap: 12px; }
@@ -427,3 +427,23 @@ details[open] > summary svg.i:last-child { transform: rotate(180deg); }
 @keyframes qcpop { 0% { transform: scale(.75); } 60% { transform: scale(1.15); } 100% { transform: scale(1); } }
 .qc:disabled { cursor: progress; }
 .qc-head .qc-box.static { width: 36px; height: 36px; }
+/* v1.4 payments: next-due picker, history table, dashboard upcoming list */
+fieldset.nd { display: grid; gap: 0; }
+.nd-preview { margin-top: 10px; display: grid; gap: 2px; padding: 10px 12px; border-radius: 12px; background: rgba(124, 92, 255, .12); border: 1px solid rgba(124, 92, 255, .3); }
+.nd-preview:empty { display: none; }
+.nd-preview b { font-size: 17px; }
+.nd-alert { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--border-2); }
+details.more > summary { list-style: none; padding: 4px 0; }
+.pay-table { display: grid; gap: 8px; }
+.pay-row { display: grid; gap: 8px; padding: 12px; border-radius: 14px; background: var(--surface); border: 1px solid var(--border); cursor: pointer; }
+.pay-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 10px; }
+@media (min-width: 720px) { .pay-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.pay-grid span { display: block; font-size: 11.5px; color: var(--muted); }
+.pay-grid b { font-size: 13.5px; }
+.up-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); color: inherit; }
+.up-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.up-badge { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 999px; margin-top: 2px; }
+.st-soon .up-dot { background: #e9b949; } .st-soon .up-badge { background: rgba(233, 185, 73, .15); color: #e9b949; }
+.st-due .up-dot { background: #f472b6; } .st-due .up-badge { background: rgba(244, 114, 182, .15); color: #f472b6; } .st-due { border-color: rgba(244, 114, 182, .35); }
+.st-late .up-dot { background: #f87171; } .st-late .up-badge { background: rgba(248, 113, 113, .15); color: #f87171; } .st-late { border-color: rgba(248, 113, 113, .35); }
+.st-paid .up-dot { background: #4ade80; } .st-paid .up-badge { background: rgba(74, 222, 128, .13); color: #4ade80; }

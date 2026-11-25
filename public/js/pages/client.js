@@ -1,10 +1,11 @@
 import { html, raw, icon, mount, money, moneyText, n, logo, date, dateShort, dateTime, empty, toast, sheet, confirmBox, copyText, kpi, relDays } from '../ui.js';
 import { get, post, del, put, invalidate, lookups } from '../api.js';
 import { can, setTitle, go, refresh, state } from '../app.js';
-import { BILLING_MODELS, SUB_TYPES, BILLING_MODES, SUB_STATUS, PAY_STATUS, PAY_METHODS, PAY_TYPES, CAMPAIGN_STATUS, TASK_PRIORITY, TASK_STATUS, RATINGS, QUOTE_STATUS, computeMetrics } from '../shared.js';
+import { dueLabel, addDays, BILLING_MODELS, SUB_TYPES, BILLING_MODES, SUB_STATUS, PAY_STATUS, PAY_METHODS, PAY_TYPES, CAMPAIGN_STATUS, TASK_PRIORITY, TASK_STATUS, RATINGS, QUOTE_STATUS, computeMetrics } from '../shared.js';
 import * as F from '../forms.js';
 import { statusBadge } from './clients.js';
 
+const diffD = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 864e5);
 export const waLink = (phone, text = '') => {
   let p = String(phone || '').replace(/\D/g, '');
   if (p.startsWith('00')) p = p.slice(2); else if (p.startsWith('05')) p = '966' + p.slice(1); else if (p.startsWith('5') && p.length === 9) p = '966' + p;
@@ -152,9 +153,23 @@ export default async function clientPage(main, { id }, q, stale) {
           ${f.end_after && f.end_after !== '9999-12-31' ? html`<div class="xs">نهاية الاشتراك: ${date(f.end_before)} ← <b>${date(f.end_after)}</b></div>` : f.end_after ? html`<div class="xs">اشتراك مفتوح — تمت إزاحة مواعيد الدفع ${f.actual_days} يوم</div>` : ''}${f.notes ? html`<div class="xs muted">${f.notes}</div>` : ''}</div>`) : html`<p class="muted small" style="margin:0">لم يتم تجميد الاشتراك من قبل.</p>`}</div></div>
       <div class="card"><div class="section-head"><h3>الاشتراكات السابقة</h3></div><div class="stack">${d.subscriptions.filter((x) => !x.is_current).map((x) => html`<div class="row small" style="padding:6px 0;border-bottom:1px solid var(--border)"><span class="grow">${date(x.start_date)} ← ${x.open ? 'مفتوح' : date(x.end_date)}</span>${can('payments.view') ? html`<span>${money(x.amount)}</span>` : ''}<span class="badge ${PAY_BADGE[x.pay_status]}">${PAY_STATUS[x.pay_status]}</span></div>`)}${d.subscriptions.filter((x) => !x.is_current).length ? '' : html`<p class="muted small" style="margin:0">لا يوجد</p>`}</div></div>`,
 
-    payments: () => html`${can('payments.create') ? html`<button class="btn primary block" data-act="payment">${icon('coins')} تسجيل دفعة</button>` : ''}
+    payments: () => html`${can('payments.create') ? html`<button class="btn primary block" data-act="payment">${icon('coins')} تسجيل دفعة جديدة</button>` : ''}
       ${s ? html`<div class="grid-3" style="margin-top:10px">${kv('الإجمالي', money(s.amount, 0), 'receipt', 'qc-blue')}${kv('المدفوع', money(s.paid, 0), 'coins', 'qc-green')}${kv('المتبقي', money(s.remaining, 0), 'wallet', 'qc-red')}</div>` : ''}
-      <div class="list" style="margin-top:10px">${d.payments.length ? d.payments.map((p) => html`<div class="item" data-pay="${p.id}"><span class="logo sm" style="background:rgba(34,197,94,.15);color:#4ade80">${icon('banknote', 'sm')}</span><div class="it-body"><div class="it-title">${money(p.amount)}</div><div class="it-sub">${date(p.date)} • ${PAY_METHODS[p.method]} • ${PAY_TYPES[p.type]}${p.period ? ' • ' + p.period : ''}${p.reference ? ' • #' + p.reference : ''}</div></div>${icon('chevL', 'sm')}</div>`) : empty('لا توجد دفعات', 'coins')}</div>`,
+      ${s && can('payments.create') && s.status !== 'frozen' ? html`<button class="btn ghost block" style="margin-top:8px" data-act="next-due">${icon('calendar')} تعديل موعد الدفعة القادمة${s.next_due ? ` (${date(s.next_due)})` : ''}</button>` : ''}
+      <div class="section-head" style="margin-top:16px"><h3>سجل الدفعات</h3><span class="muted small">${d.payments.length} دفعة</span></div>
+      ${d.payments.length ? html`<div class="pay-table">${d.payments.map((p) => {
+        const late = p.prev_due_date && p.date > p.prev_due_date ? diffD(p.prev_due_date, p.date) : 0;
+        const stt = !p.prev_due_date ? ['تم الاستلام', 'b-green'] : late > 0 ? [`متأخرة ${late} يوم`, 'b-red'] : p.date < p.prev_due_date ? ['مبكرة', 'b-cyan'] : ['في الموعد', 'b-green'];
+        return html`<div class="pay-row" data-pay="${p.id}">
+          <div class="row between"><b style="font-size:16px">${money(p.amount)}</b><span class="badge ${stt[1]}">${stt[0]}</span></div>
+          <div class="pay-grid">
+            <div><span>تاريخ الاستلام</span><b>${date(p.date)}</b></div>
+            <div><span>الاستحقاق السابق</span><b>${p.prev_due_date ? date(p.prev_due_date) : '—'}</b></div>
+            <div><span>الدفعة القادمة المحددة</span><b>${p.next_due_date ? date(p.next_due_date) : '—'}</b></div>
+            <div><span>أيام الدورة القادمة</span><b>${p.next_due_days ? `${p.next_due_days} يوم` : p.next_due_date ? 'تلقائي' : '—'}</b></div>
+          </div>
+          <div class="xs muted">${[PAY_METHODS[p.method], PAY_TYPES[p.type], p.period, p.reference ? '#' + p.reference : null].filter(Boolean).join(' • ')}${p.notes ? html`<br>📝 ${p.notes}` : ''}</div></div>`;
+      })}</div>` : empty('لا توجد دفعات', 'coins')}`,
 
     reports: () => html`${can('reports.create') ? html`<button class="btn primary block" data-act="report">${icon('bars')} إنشاء تقرير سريع</button>` : ''}
       <div class="list" style="margin-top:10px">${d.reports?.length ? d.reports.map((r) => { const m = computeMetrics(r); return html`<a class="item" href="#/reports/${r.id}"><span class="logo sm" style="background:var(--surface-2);color:var(--cyan)">${icon('bars', 'sm')}</span><div class="it-body"><div class="it-title">${r.platform} • ${dateShort(r.period_from)} ← ${dateShort(r.period_to)}</div><div class="it-sub">مصروف ${n(r.spend)} • مبيعات ${n(r.sales)} • ROAS ${kpi.roas(m.roas)}</div></div>${icon('chevL', 'sm')}</a>`; }) : empty('لا توجد تقارير', 'bars')}</div>`,
@@ -171,14 +186,16 @@ export default async function clientPage(main, { id }, q, stale) {
     const b = s.billing || {};
     const st = s.pay_status;
     return html`<div class="card" style="margin-bottom:12px;padding:14px;${st === 'late' ? 'border-color:rgba(244,63,94,.5)' : st === 'due' || st === 'soon' ? 'border-color:rgba(245,181,68,.45)' : ''}">
-      <div class="row between"><b>${icon('coins', 'sm')} الدفع ${b.cycle_days ? `كل ${b.cycle_days} يوم` : b.monthly || b.amount_unset ? 'الشهري' : ''}</b><span class="badge ${PAY_BADGE[st]}" style="font-size:13px">${PAY_STATUS[st]}${s.partial ? ' • جزئي' : ''}</span></div>
+      <div class="row between"><b>${icon('coins', 'sm')} الدفع ${b.manual ? '(موعد محدد يدويًا)' : ''} ${b.cycle_days ? `كل ${b.cycle_days} يوم` : b.monthly || b.amount_unset ? 'الشهري' : ''}</b><span class="badge ${PAY_BADGE[st]}" style="font-size:13px">${st === 'late' ? dueLabel('late', s.days_to_due) : PAY_STATUS[st]}${s.partial ? ' • جزئي' : ''}</span></div>
       <div class="grid-2" style="margin-top:10px">
         <div><div class="xs muted">الدفعة القادمة</div><div class="bold">${s.next_due ? date(s.next_due) : '—'}</div>${s.next_due ? html`<div class="xs" style="color:${s.days_to_due < 0 ? '#fb7185' : 'var(--muted)'}">${relDays(s.days_to_due)}</div>` : ''}</div>
         <div><div class="xs muted">المبلغ</div><div class="bold">${b.amount_unset ? html`<span style="color:var(--gold)">غير محدد</span>` : s.next_due ? money(s.amount_due) : '—'}</div>${b.period_paid > 0 && s.partial ? html`<div class="xs muted">مدفوع ${money(b.period_paid)} من ${money(b.monthly)}</div>` : ''}${b.periods_due > 1 ? html`<div class="xs" style="color:#fb7185">${b.periods_due} دفعات متأخرة</div>` : ''}</div>
         <div><div class="xs muted">آخر دفعة</div><div class="bold">${lastPayment ? date(lastPayment.date) : '—'}</div></div>
         <div><div class="xs muted">${b.monthly || b.amount_unset ? 'موعد التحصيل' : 'نوع الدفع'}</div><div class="bold">${b.cycle_days ? `كل ${b.cycle_days} يوم` : b.monthly || b.amount_unset ? `${b.pay_day} من كل شهر` : 'دفعة واحدة'}</div></div>
       </div>
-      <div class="row" style="margin-top:10px;gap:8px">${can('payments.create') && s.next_due ? html`<button class="btn sm success grow" data-act="payment">${icon('coins', 'sm')} تسجيل الدفعة</button>` : ''}
+      ${s.next_due && c.pay_alert_enabled ? html`<div class="xs muted" style="margin-top:8px">${icon('bell', 'sm')} التنبيهات: ${c.pay_alert_days > 0 ? `${date(addDays(s.next_due, -c.pay_alert_days))} (قبل ${c.pay_alert_days} يوم) • ` : ''}يوم الاستحقاق ${date(s.next_due)} • الساعة ${c.pay_alert_time || state.settings.default_alert_time || '09:00'}${s.pay_status === 'late' ? ' • تذكير مستمر حتى تسجيل الدفعة' : ''}</div>` : ''}
+      <div class="row" style="margin-top:10px;gap:8px">${can('payments.create') ? html`<button class="btn sm success grow" data-act="payment">${icon('coins', 'sm')} تسجيل دفعة جديدة</button>` : ''}
+        ${can('payments.create') && s.status !== 'frozen' ? html`<button class="btn sm ghost grow" data-act="next-due">${icon('calendar', 'sm')} تعديل الموعد</button>` : ''}
         ${can('clients.edit') ? html`<button class="btn sm ghost grow" data-act="alert">${icon('bell', 'sm')} ${c.pay_alert_enabled ? `التنبيه قبل ${c.pay_alert_days} أيام` : 'تفعيل التنبيه'}</button>` : ''}</div></div>`;
   }
   function linksList() {
@@ -200,6 +217,7 @@ export default async function clientPage(main, { id }, q, stale) {
     payment: async () => after(await F.paymentForm({ client_id: c.id, remaining: s?.remaining, amount_due: s?.amount_due, next_due: s?.next_due, commission: c.billing_model === 'commission' })),
     delete: () => deleteClient(c),
     alert: async () => after(await F.alertForm(c)),
+    'next-due': async () => after(await F.nextDueForm(c, s)),
     freeze: async () => after(await F.freezeForm(c)),
     unfreeze: async () => after(await F.unfreezeForm(c)),
     renew: async () => after(await F.subscriptionForm({ client: c, sub: s, renew: true })),
