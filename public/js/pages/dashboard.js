@@ -56,6 +56,17 @@ export default async function dashboard(main, _p, _q, stale) {
       <div class="stack" style="gap:6px">${d.alerts.slice(0, 10).map((a) => html`<div class="alert-item" data-link="${a.link || (a.campaign_id ? `#/campaigns/${a.campaign_id}` : a.client_id ? `#/clients/${a.client_id}` : '#/')}"><span class="lv lv-${a.level}"></span><span class="grow">${a.text}</span>${icon('chevL', 'sm')}</div>`)}
       ${d.alerts.length > 10 ? html`<button class="btn sm ghost" data-more-alerts>عرض كل التنبيهات (${d.alerts.length})</button>` : ''}</div></div>` : ''}
 
+    ${money_ok ? html`<div class="section card"><div class="section-head"><h3>${icon('banknote', 'sm')} الدفعات الواردة</h3><a href="#/payments/register">سجل الدفعات</a></div>
+      <div class="grid-2">
+        <a class="kv" href="#/payments/register"><span class="kv-ic qc-green">${icon('coins', 'sm')}</span><div class="grow"><div class="k">المستلم اليوم (${s.received_today_count})</div><div class="v">${money(s.received_today, 0)}</div></div></a>
+        <a class="kv" href="#/payments/register"><span class="kv-ic qc-blue">${icon('calendar', 'sm')}</span><div class="grow"><div class="k">المستلم هذا الشهر</div><div class="v">${money(s.collected_month, 0)}</div></div></a>
+        <a class="kv" href="#/payments/upcoming?f=today"><span class="kv-ic qc-pink">${icon('bell', 'sm')}</span><div class="grow"><div class="k">مستحقة اليوم</div><div class="v num">${n(s.payments_due_today, 0)}</div></div></a>
+        <a class="kv" href="#/payments/upcoming?f=late"><span class="kv-ic qc-red">${icon('alert', 'sm')}</span><div class="grow"><div class="k">متأخرة</div><div class="v num">${n(s.payments_late, 0)}</div></div></a>
+      </div>
+      ${can('payments.create') ? html`<button class="btn primary block" style="margin-top:12px" data-new-payment>${icon('plus')} تسجيل دفعة</button>` : ''}
+      ${d.recent_payments?.length ? html`<div class="xs muted" style="margin:12px 2px 6px">آخر الدفعات المسجلة</div><div class="stack" style="gap:6px">${d.recent_payments.map((p) => html`<a class="up-row st-paid" href="#/payment/${p.id}">${logo({ name: p.client_name, logo: p.logo }, 'sm')}<div class="grow" style="min-width:0"><div class="bold ellipsis">${p.client_name}</div><div class="xs muted">${date(p.date)}${p.has_receipt ? ' • 🧾 حوالة' : ''}</div></div><b class="num" style="color:#4ade80">${n(p.amount, 0)}</b></a>`)}</div>` : ''}
+    </div>` : ''}
+
     ${money_ok && d.upcoming?.length ? html`<div class="section card"><div class="section-head"><h3>${icon('wallet', 'sm')} الدفعات القادمة</h3><a href="#/payments/upcoming">عرض الكل</a></div>
       <div class="stack" style="gap:6px">${d.upcoming.map((u) => html`<a class="up-row st-${u.status}" href="#/clients/${u.client_id}?tab=payments">
         <span class="up-dot"></span><div class="grow" style="min-width:0"><div class="bold ellipsis">${u.name}</div><div class="xs muted">${date(u.next_due)} • ${u.days_to_due > 0 ? `بعد ${u.days_to_due} يوم` : u.days_to_due === 0 ? 'اليوم' : `منذ ${-u.days_to_due} يوم`}</div></div>
@@ -101,6 +112,7 @@ export default async function dashboard(main, _p, _q, stale) {
   main.addEventListener('click', async (e) => {
     const t = e.target;
     if (t.closest('[data-start]')) return go('#/followup?start=1');
+    if (t.closest('[data-new-payment]')) { const F = await import('../forms.js'); if (await F.paymentForm({})) { const { refresh } = await import('../app.js'); refresh(); } return; }
     const al = t.closest('[data-link]'); if (al) return go(al.dataset.link);
     if (t.closest('[data-more-alerts]')) { const { sheet } = await import('../ui.js'); return sheet({ title: 'كل التنبيهات', body: html`<div class="stack" style="gap:6px">${d.alerts.map((a) => html`<a class="alert-item" href="${a.link || (a.client_id ? `#/clients/${a.client_id}` : '#/')}"><span class="lv lv-${a.level}"></span><span class="grow">${a.text}</span></a>`)}</div>`, onMount: (el, close) => el.addEventListener('click', (ev) => ev.target.closest('a') && close()) }); }
     const item = t.closest('[data-today] .item');

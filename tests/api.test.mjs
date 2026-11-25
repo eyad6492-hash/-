@@ -493,6 +493,49 @@ async function main() {
     const d = ok(await owner('GET', `/api/clients/${fx}`), 'g'); assert.equal(d.client.pay_alert_time, '10:00'); assert.equal(d.client.pay_alert_days, 1);
   });
 
+  console.log('\nv1.5 — قسم تسجيل الدفعات وصور الحوالات');
+  const JPG = '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==';
+  let rp, rpClient;
+  await test('تسجيل دفعة بتاريخ سابق مع صورة حوالة واستحقاق بعد 15 يوم', async () => {
+    rpClient = ok(await owner('POST', '/api/clients', { name: 'سجل مركزي', phone: '0599990000', subscription: { sub_type: 'open', monthly_amount: 1600, start_date: addD(today, -20), first_due_date: addD(today, -5) } }), 'c').id;
+    const r = ok(await owner('POST', `/api/clients/${rpClient}/payments`, { amount: 800, date: addD(today, -2), notes: 'دفعة جزئية', next_due_mode: 'days', next_due_days: 15, receipt: { mime: 'image/jpeg', data: JPG }, client_key: 'k-' + Date.now() }), 'p');
+    rp = r.id; assert.equal(r.next_due, addD(today, 13));
+    const d = ok(await owner('GET', `/api/payments/${rp}`), 'g');
+    assert.equal(d.payment.has_receipt, 1); assert.equal(d.payment.date, addD(today, -2)); assert.ok(d.receipt.size > 100); assert.equal(d.client_due.next_due, addD(today, 13));
+    const img = await owner('GET', `/api/payments/${rp}/receipt`, undefined, true);
+    assert.equal(img.status, 200); assert.equal(img.headers.get('content-type'), 'image/jpeg'); assert.ok(img.headers.get('cache-control').includes('no-store'));
+    assert.equal((await anon('GET', `/api/payments/${rp}/receipt`)).status, 401, 'receipt never public');
+  });
+  await test('رفض ملف ليس صورة أو بنوع مزيف', async () => {
+    assert.equal((await owner('POST', `/api/clients/${rpClient}/payments`, { amount: 1, receipt: { mime: 'image/png', data: JPG } })).status, 400);
+    assert.equal((await owner('POST', `/api/clients/${rpClient}/payments`, { amount: 1, receipt: { mime: 'text/html', data: 'PGh0bWw+' } })).status, 400);
+  });
+  await test('منع التسجيل المزدوج (ضغط متكرر على الحفظ)', async () => {
+    const key = 'dbl-' + Date.now();
+    const before = ok(await owner('GET', `/api/clients/${rpClient}`), 'g').payments.length;
+    const rs = await Promise.all([1, 2, 3].map(() => owner('POST', `/api/clients/${rpClient}/payments`, { amount: 300, date: today, client_key: key, next_due_mode: 'days', next_due_days: 7 })));
+    const ids = new Set(rs.map((x) => x.data.id)); assert.equal(ids.size, 1);
+    assert.equal(ok(await owner('GET', `/api/clients/${rpClient}`), 'g').payments.length, before + 1);
+  });
+  await test('الدفعة الجزئية لا تُعتبر سدادًا كاملًا وكل الدفعات محفوظة', async () => {
+    const d = ok(await owner('GET', `/api/clients/${rpClient}`), 'g');
+    assert.equal(d.payments.length, 2); assert.ok(d.payments.some((p) => p.amount === 800) && d.payments.some((p) => p.amount === 300));
+  });
+  await test('تعديل الدفعة مع سجل التعديلات واستبدال/حذف الصورة مع بقاء الدفعة', async () => {
+    ok(await owner('PUT', `/api/payments/${rp}`, { amount: 850, date: addD(today, -2), notes: 'تحويل بنكي' }), 'e');
+    ok(await owner('PUT', `/api/payments/${rp}/receipt`, { receipt: { mime: 'image/jpeg', data: JPG } }), 'replace');
+    ok(await owner('DELETE', `/api/payments/${rp}/receipt`), 'del');
+    const d = ok(await owner('GET', `/api/payments/${rp}`), 'g');
+    assert.equal(d.payment.amount, 850); assert.equal(d.payment.has_receipt, 0); assert.equal(d.receipt, null);
+    assert.ok(d.history.some((h) => h.action === 'تعديل دفعة' && h.details.includes('المبلغ: 800 → 850')));
+    assert.ok(d.history.some((h) => h.action === 'استبدال صورة الحوالة') && d.history.some((h) => h.action === 'حذف صورة الحوالة'));
+  });
+  await test('السجل المركزي والداشبورد متزامنان', async () => {
+    const l = ok(await owner('GET', '/api/payments'), 'l'); const row = l.items.find((x) => x.id === rp);
+    assert.equal(row.client_phone, '0599990000'); assert.ok(row.client_due.next_due);
+    const dash = ok(await owner('GET', '/api/dashboard'), 'd'); assert.ok(dash.stats.received_today >= 300); assert.ok(dash.recent_payments.some((x) => x.client_id === rpClient));
+  });
+
   console.log('\nلوحة التحكم والتقويم والبيانات التجريبية');
   await test('لوحة التحكم والرسوم', async () => {
     const d = ok(await owner('GET', '/api/dashboard'), 'd'); assert.ok(d.stats.clients_total >= 1);

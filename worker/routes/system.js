@@ -33,7 +33,7 @@ function buckets(from, to, unit) {
   return out;
 }
 
-const EXPORT_TABLES = ['settings', 'categories', 'trials', 'clients', 'subscriptions', 'freezes', 'payments', 'campaigns', 'campaign_snapshots', 'followups', 'tasks', 'reports', 'service_templates', 'quotes', 'checklist_entries', 'quick_checks', 'activity_log'];
+const EXPORT_TABLES = ['settings', 'categories', 'trials', 'clients', 'subscriptions', 'freezes', 'payments', 'campaigns', 'campaign_snapshots', 'followups', 'tasks', 'reports', 'service_templates', 'quotes', 'checklist_entries', 'quick_checks', 'payment_receipts', 'activity_log'];
 const DEMO_TABLES = ['quick_checks', 'checklist_entries', 'vault_entries', 'campaign_snapshots', 'freezes', 'payments', 'followups', 'tasks', 'reports', 'quotes', 'campaigns', 'subscriptions', 'clients', 'service_templates', 'trials'];
 
 async function tableColumns(db, t) {
@@ -134,8 +134,12 @@ export const systemRoutes = {
       .map((c) => ({ id: c.id, name: c.name, store_name: c.store_name, logo: c.logo, platforms: c.platforms, campaigns: c.campaigns_active }));
     const { results: tasks } = await db.prepare("SELECT t.id, t.title, t.priority, t.due_date, t.client_id, c.name client_name FROM tasks t LEFT JOIN clients c ON c.id = t.client_id WHERE t.due_date <= ? AND t.status NOT IN ('done','cancelled') ORDER BY t.due_date, CASE t.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END LIMIT 30").bind(t).all();
     const followedToday = (await one('SELECT COUNT(DISTINCT client_id) n FROM followups WHERE date = ?', t)).n;
+    const recvToday = money ? (await one('SELECT COALESCE(SUM(amount),0) v, COUNT(*) n FROM payments WHERE date = ?', t)) : null;
+    const { results: recent } = money ? await db.prepare('SELECT p.id, p.amount, p.date, p.has_receipt, p.client_id, c.name client_name, c.logo FROM payments p JOIN clients c ON c.id = p.client_id ORDER BY p.created_at DESC LIMIT 6').all() : { results: [] };
+    stats.received_today = recvToday?.v ?? null; stats.received_today_count = recvToday?.n ?? null;
+    stats.payments_due_today = money ? up.filter((r) => r.status === 'due').length : null;
     const upcoming = up.filter((r) => r.next_due && r.status !== 'frozen').slice(0, 8).map((r) => ({ client_id: r.client_id, name: r.name, next_due: r.next_due, days_to_due: r.days_to_due, amount_due: r.status === 'late' ? r.owed_now || r.amount_due : r.amount_due, status: r.status }));
-    return json({ today: t, stats, alerts: alerts.slice(0, 60), review, tasks, followed_today: followedToday, upcoming });
+    return json({ today: t, stats, alerts: alerts.slice(0, 60), review, tasks, followed_today: followedToday, upcoming, recent_payments: recent });
   },
 
   'GET /api/dashboard/charts': async (ctx) => {
@@ -399,7 +403,7 @@ export const systemRoutes = {
   'POST /api/demo/clear': async (ctx) => {
     need(ctx, 'settings.manage');
     const db = ctx.env.DB;
-    const stmts = [db.prepare("DELETE FROM quick_checks WHERE client_id LIKE 'demo_%'"), ...DEMO_TABLES.map((t) => db.prepare(`DELETE FROM ${t} WHERE id LIKE 'demo_%'`))];
+    const stmts = [db.prepare("DELETE FROM payment_receipts WHERE payment_id IN (SELECT id FROM payments WHERE client_id LIKE 'demo_%')"), db.prepare("DELETE FROM quick_checks WHERE client_id LIKE 'demo_%'"), ...DEMO_TABLES.map((t) => db.prepare(`DELETE FROM ${t} WHERE id LIKE 'demo_%'`))];
     stmts.push(db.prepare("DELETE FROM activity_log WHERE client_id LIKE 'demo_%'"));
     await db.batch(stmts);
     await log(ctx, 'حذف البيانات التجريبية', { entity: 'demo' });

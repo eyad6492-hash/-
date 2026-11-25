@@ -1,5 +1,5 @@
 // Reusable form sheets. Each returns the API result (truthy) when saved, or undefined when cancelled.
-import { html, raw, icon, field, inp, sel, ta, checks, formSheet, toast, readImageAsDataURL, esc, moneyText, date } from './ui.js';
+import { html, raw, icon, field, inp, sel, ta, checks, formSheet, sheet, toast, readImageAsDataURL, esc, moneyText, date, logo } from './ui.js';
 import { get, post, put, lookups, invalidate } from './api.js';
 import { state } from './app.js';
 import { BILLING_MODELS, PLATFORMS, PAY_METHODS, PAY_TYPES, TASK_PRIORITY, TASK_STATUS, RECURRENCE, CAMPAIGN_STATUS, VAULT_TYPES, SUB_TYPES, BILLING_MODES, addMonths, addDays, diffDays, tenure, defaultFirstDue } from './shared.js';
@@ -146,13 +146,22 @@ export async function paymentForm({ client_id, payment, remaining, amount_due, n
   };
   return formSheet({
     title: 'تسجيل دفعة جديدة',
-    body: html`${client_id ? '' : field('العميل *', await clientOptions(client_id))}
+    body: html`${client_id ? '' : html`<div class="field"><span>العميل *</span>
+        <input type="hidden" name="client_id" value="">
+        <div class="cpick" data-cpick><div class="input-icon">${icon('search')}<input type="search" data-cq placeholder="ابحث باسم العميل أو رقم الجوال…" autocomplete="off"></div>
+          <div class="cpick-list" data-cl></div></div>
+        <div class="cpick-chosen hidden" data-chosen></div></div>`}
       ${remaining ? html`<div class="badge b-gold" style="justify-self:start">المستحق حاليًا: ${moneyText(remaining)}</div>` : ''}
       ${next_due ? html`<div class="badge b-blue" style="justify-self:start">الموعد الحالي ${date(next_due)}${amount_due ? `: ${moneyText(amount_due)}` : ''}</div>` : ''}
       <div class="form-grid cols-2">
-        ${field('مبلغ الدفعة *', inp('amount', remaining || amount_due || '', { type: 'number', step: 'any', min: 0, req: true }))}
-        ${field('تاريخ استلام الدفعة', inp('date', today(), { type: 'date', req: true, attrs: `max="${today()}"` }))}
+        ${field('مبلغ الدفعة (ر.س) *', inp('amount', remaining || amount_due || '', { type: 'number', step: 'any', min: 0, req: true }))}
+        ${field('تاريخ التحويل / الاستلام', inp('date', today(), { type: 'date', req: true, attrs: `max="${today()}"` }))}
       </div>
+      <div class="field"><span>صورة الحوالة (اختياري)</span>
+        <label class="receipt-drop" data-rdrop><input type="file" accept="image/*" data-rfile hidden>
+          <span data-rempty>${icon('image')} إرفاق صورة الحوالة — من الجوال أو الكمبيوتر</span>
+          <img data-rprev class="hidden" alt="معاينة الحوالة"></label>
+        <div class="row hidden" data-ractions style="gap:8px"><span class="xs muted grow" data-rinfo></span><button type="button" class="btn sm ghost" data-rchange>تغيير</button><button type="button" class="btn sm danger" data-rremove>إزالة</button></div></div>
       <div data-next-box>${nextSection()}</div>
       ${field('ملاحظات (اختياري)', ta('notes', '', '', 2))}
       <details class="more"><summary class="small muted" style="cursor:pointer">تفاصيل إضافية (طريقة الدفع، النوع، المرجع)</summary>
@@ -164,6 +173,44 @@ export async function paymentForm({ client_id, payment, remaining, amount_due, n
     submit: 'حفظ الدفعة',
     onMount: (el, _close, form) => {
       const box = el.querySelector('[data-next-box]');
+      form.dataset.key = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random());
+      // ---- receipt picker (compressed on the device before upload) ----
+      const rfile = el.querySelector('[data-rfile]');
+      const setReceipt = (r) => {
+        form._receipt = r;
+        el.querySelector('[data-rprev]').classList.toggle('hidden', !r); el.querySelector('[data-rempty]').classList.toggle('hidden', !!r);
+        el.querySelector('[data-ractions]').classList.toggle('hidden', !r);
+        if (r) { el.querySelector('[data-rprev]').src = r.url; el.querySelector('[data-rinfo]').textContent = `${Math.round(r.size / 1024)} KB — تُضغط تلقائيًا`; }
+        else rfile.value = '';
+      };
+      rfile?.addEventListener('change', async () => {
+        const f = rfile.files[0]; if (!f) return;
+        try { setReceipt(await compressReceipt(f)); } catch (err) { toast(err.message, 'err'); setReceipt(null); }
+      });
+      el.querySelector('[data-rchange]')?.addEventListener('click', () => rfile.click());
+      el.querySelector('[data-rremove]')?.addEventListener('click', () => setReceipt(null));
+      // ---- client search by name or phone ----
+      const cq = el.querySelector('[data-cq]');
+      if (cq) {
+        let all = [];
+        lookups.clients().then((l) => { all = l.filter((c) => c.status !== 'former'); draw(''); });
+        const norm = (x) => String(x || '').replace(/\D/g, '').replace(/^966/, '0').replace(/^5/, '05');
+        const draw = (q) => {
+          const t = q.trim().toLowerCase(), digits = norm(q);
+          const list = all.filter((c) => !t || c.name.toLowerCase().includes(t) || (c.store_name || '').toLowerCase().includes(t) || (digits.length >= 3 && norm(c.phone).includes(digits))).slice(0, 8);
+          el.querySelector('[data-cl]').innerHTML = list.length ? list.map((c) => String(html`<button type="button" class="item" data-pick="${c.id}" style="width:100%;text-align:start">${logo(c, 'sm')}<div class="it-body"><div class="it-title">${c.name}</div><div class="it-sub ltr" style="text-align:right">${c.phone || '—'}</div></div></button>`)).join('') : String(html`<p class="muted small" style="margin:6px">لا يوجد عميل مطابق</p>`);
+        };
+        cq.addEventListener('input', () => draw(cq.value));
+        el.querySelector('[data-cl]').addEventListener('click', (e) => {
+          const b = e.target.closest('[data-pick]'); if (!b) return;
+          const c = all.find((x) => x.id === b.dataset.pick);
+          form.client_id.value = c.id; form.client_id.dispatchEvent(new Event('change'));
+          el.querySelector('[data-cpick]').classList.add('hidden');
+          const ch = el.querySelector('[data-chosen]'); ch.classList.remove('hidden');
+          ch.innerHTML = String(html`<div class="item" style="cursor:default">${logo(c, 'sm')}<div class="it-body"><div class="it-title">${c.name}</div><div class="it-sub ltr" style="text-align:right">${c.phone || ''}</div></div><button type="button" class="btn sm ghost" data-unpick>تغيير</button></div>`);
+          ch.querySelector('[data-unpick]').addEventListener('click', () => { form.client_id.value = ''; ch.classList.add('hidden'); el.querySelector('[data-cpick]').classList.remove('hidden'); cq.focus(); });
+        });
+      }
       const preview = () => {
         const pv = el.querySelector('[data-nd-preview]'); if (!pv) return;
         const mode = form.next_due_mode?.value, base = form.date.value || today();
@@ -196,9 +243,12 @@ export async function paymentForm({ client_id, payment, remaining, amount_due, n
         if (info?.sub?.amount_due && !form.amount.value) form.amount.value = info.sub.amount_due;
       });
     },
-    onSubmit: async (d) => {
+    onSubmit: async (d, el, form) => {
       const cid = d.client_id || client_id;
-      const body = { amount: d.amount, date: d.date, notes: d.notes, method: d.method, type: d.type, period: d.period, reference: d.reference };
+      if (!cid) throw new Error('اختر العميل أولًا');
+      if (!(d.amount > 0)) throw new Error('أدخل مبلغ الدفعة');
+      const body = { amount: d.amount, date: d.date, notes: d.notes, method: d.method, type: d.type, period: d.period, reference: d.reference, client_key: form.dataset.key };
+      if (form._receipt) body.receipt = { mime: form._receipt.mime, data: form._receipt.data };
       if (d.next_due_mode && d.type === 'subscription') {
         body.next_due_mode = d.next_due_mode;
         if (d.next_due_mode === 'days') body.next_due_days = d.next_due_days;
@@ -206,7 +256,9 @@ export async function paymentForm({ client_id, payment, remaining, amount_due, n
         body.alert = { enabled: !!d.alert_enabled, days: Number(d.alert_days), time: d.alert_time };
       }
       const r = await post(`/api/clients/${cid}/payments`, body);
-      toast(r.next_due ? `تم تسجيل الدفعة — الدفعة القادمة ${date(r.next_due)}` : 'تم تسجيل الدفعة');
+      invalidate('clients');
+      const name = info?.client?.name || '';
+      setTimeout(() => paymentSuccess({ ...r, client_id: cid, name, amount: d.amount, date: d.date, receipt: !!form._receipt }), 50);
       return r;
     },
   });
@@ -351,6 +403,35 @@ export async function subscriptionForm({ client, sub, renew } = {}) {
       const r = editing ? await put(`/api/subscriptions/${s.id}`, body) : await post(`/api/clients/${client.id}/subscriptions`, body);
       toast(editing ? 'تم تعديل الاشتراك' : renew ? 'تم تجديد الاشتراك' : 'تمت إضافة الاشتراك'); return r;
     },
+  });
+}
+
+async function compressReceipt(file) {
+  if (!/^image\//.test(file.type)) throw new Error('اختر صورة (JPG أو PNG)');
+  let q = 0.85, max = 1600, url = await readImageAsDataURL(file, max);
+  while (url.length * 0.75 > 1.2 * 1024 * 1024 && q > 0.4) { q -= 0.15; max = Math.round(max * 0.85); url = await readImageAsDataURLq(file, max, q); }
+  const data = url.split(',')[1];
+  return { mime: 'image/jpeg', data, url, size: Math.floor(data.length * 0.75) };
+}
+function readImageAsDataURLq(file, max, q) {
+  return new Promise((resolve, reject) => {
+    const img = new Image(); const u = URL.createObjectURL(file);
+    img.onload = () => { const s = Math.min(1, max / Math.max(img.width, img.height)); const c = document.createElement('canvas'); c.width = Math.round(img.width * s); c.height = Math.round(img.height * s); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(u); resolve(c.toDataURL('image/jpeg', q)); };
+    img.onerror = () => reject(new Error('صورة غير صالحة')); img.src = u;
+  });
+}
+
+/** Clear confirmation after saving a payment, with shortcuts. */
+export function paymentSuccess(r) {
+  return sheet({
+    title: r.duplicate ? 'الدفعة مسجلة مسبقًا' : 'تم تسجيل الدفعة ✅',
+    body: html`<div class="success-banner" style="margin-bottom:12px">${icon('checkCircle')} ${moneyText(r.amount)}${r.name ? ` — ${r.name}` : ''}</div>
+      <div class="kvlist"><div><span>تاريخ التحويل</span><span>${date(r.date)}</span></div>
+        <div><span>الدفعة القادمة</span><span>${r.next_due ? date(r.next_due) : '—'}</span></div>
+        <div><span>صورة الحوالة</span><span>${r.receipt ? 'مرفقة ✓' : '—'}</span></div></div>
+      ${r.duplicate ? html`<p class="small muted">تم تجاهل الضغطة المكررة — لم تُسجَّل الدفعة مرتين.</p>` : ''}`,
+    foot: html`<button class="btn ghost" data-x="new">${icon('plus', 'sm')} دفعة أخرى</button><a class="btn primary" href="#/clients/${r.client_id}?tab=payments" data-close>${icon('user', 'sm')} فتح ملف العميل</a>`,
+    onMount: (el, close) => el.querySelector('[data-x="new"]').addEventListener('click', () => { close(); paymentForm({}).then((x) => { if (x) window.dispatchEvent(new HashChangeEvent('hashchange')); }); }),
   });
 }
 

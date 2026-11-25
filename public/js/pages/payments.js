@@ -31,6 +31,7 @@ export default async function paymentsPage(main, _p, q, stale) {
     </div>
     <div class="row" style="margin-top:14px"><div class="seg grow" style="display:flex"><button class="grow ${tab === 'board' ? 'active' : ''}" data-tab="board">لوحة التحصيل</button><button class="grow ${tab === 'log' ? 'active' : ''}" data-tab="log">سجل الدفعات</button></div>
       ${can('payments.create') ? html`<button class="btn primary" data-add>${icon('plus')} دفعة</button>` : ''}</div>
+    <a class="link" href="#/payments/register" style="display:block;margin-top:8px">${icon('banknote', 'sm')} سجل الدفعات المركزي (بحث، تصفية، صور الحوالات)</a>
     <div data-panel style="margin-top:12px"></div>`);
   const panel = main.querySelector('[data-panel]');
   const sec = (title, arr, badge) => html`<div class="section"><div class="section-head"><h3>${title}</h3><span class="badge ${badge}">${arr.length}</span></div><div class="list grid-auto">${arr.length ? arr.map((c) => cRow(c)) : html`<p class="muted small" style="margin:0 4px">لا يوجد</p>`}</div></div>`;

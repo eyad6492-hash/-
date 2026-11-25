@@ -160,15 +160,15 @@ export default async function clientPage(main, { id }, q, stale) {
       ${d.payments.length ? html`<div class="pay-table">${d.payments.map((p) => {
         const late = p.prev_due_date && p.date > p.prev_due_date ? diffD(p.prev_due_date, p.date) : 0;
         const stt = !p.prev_due_date ? ['تم الاستلام', 'b-green'] : late > 0 ? [`متأخرة ${late} يوم`, 'b-red'] : p.date < p.prev_due_date ? ['مبكرة', 'b-cyan'] : ['في الموعد', 'b-green'];
-        return html`<div class="pay-row" data-pay="${p.id}">
-          <div class="row between"><b style="font-size:16px">${money(p.amount)}</b><span class="badge ${stt[1]}">${stt[0]}</span></div>
+        return html`<a class="pay-row" href="#/payment/${p.id}" style="color:inherit">
+          <div class="row between"><b style="font-size:16px">${money(p.amount)}${p.has_receipt ? html` <span class="xs" style="color:var(--cyan)">🧾</span>` : ''}</b><span class="badge ${stt[1]}">${stt[0]}</span></div>
           <div class="pay-grid">
             <div><span>تاريخ الاستلام</span><b>${date(p.date)}</b></div>
             <div><span>الاستحقاق السابق</span><b>${p.prev_due_date ? date(p.prev_due_date) : '—'}</b></div>
             <div><span>الدفعة القادمة المحددة</span><b>${p.next_due_date ? date(p.next_due_date) : '—'}</b></div>
             <div><span>أيام الدورة القادمة</span><b>${p.next_due_days ? `${p.next_due_days} يوم` : p.next_due_date ? 'تلقائي' : '—'}</b></div>
           </div>
-          <div class="xs muted">${[PAY_METHODS[p.method], PAY_TYPES[p.type], p.period, p.reference ? '#' + p.reference : null].filter(Boolean).join(' • ')}${p.notes ? html`<br>📝 ${p.notes}` : ''}</div></div>`;
+          <div class="xs muted">${[PAY_METHODS[p.method], PAY_TYPES[p.type], p.period, p.reference ? '#' + p.reference : null].filter(Boolean).join(' • ')}${p.notes ? html`<br>📝 ${p.notes}` : ''}</div></a>`;
       })}</div>` : empty('لا توجد دفعات', 'coins')}`,
 
     reports: () => html`${can('reports.create') ? html`<button class="btn primary block" data-act="report">${icon('bars')} إنشاء تقرير سريع</button>` : ''}

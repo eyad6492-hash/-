@@ -133,7 +133,7 @@ export const clientRoutes = {
     return json({ items: results });
   },
   'GET /api/clients/lite': async (ctx) => {
-    const { results } = await ctx.env.DB.prepare("SELECT id, name, store_name, logo, status FROM clients ORDER BY name").all();
+    const { results } = await ctx.env.DB.prepare("SELECT id, name, store_name, phone, logo, status FROM clients ORDER BY name").all();
     return json({ items: results });
   },
 
@@ -198,6 +198,7 @@ export const clientRoutes = {
     if (ctx.user.role !== 'owner') throw new HttpError(403, 'الحذف النهائي للعملاء متاح لمالك التطبيق فقط — يمكنك الأرشفة بدلًا من ذلك');
     const c = await getClient(ctx, ctx.params.id);
     const db = ctx.env.DB;
+    await db.prepare('DELETE FROM payment_receipts WHERE payment_id IN (SELECT id FROM payments WHERE client_id = ?)').bind(c.id).run();
     await db.batch([
       ...['subscriptions', 'freezes', 'payments', 'campaign_snapshots', 'campaigns', 'followups', 'reports', 'vault_entries', 'checklist_entries', 'quick_checks'].map((t) => db.prepare(`DELETE FROM ${t} WHERE client_id = ?`).bind(c.id)),
       db.prepare('UPDATE tasks SET client_id = NULL WHERE client_id = ?').bind(c.id),
@@ -367,8 +368,9 @@ export const clientRoutes = {
   // ---------------- Payments ----------------
   'GET /api/payments': async (ctx) => {
     need(ctx, 'payments.view');
-    const { results } = await ctx.env.DB.prepare('SELECT p.*, c.name AS client_name, c.store_name, c.logo FROM payments p JOIN clients c ON c.id = p.client_id ORDER BY p.date DESC, p.created_at DESC LIMIT 1000').all();
-    return json({ items: results });
+    const { results } = await ctx.env.DB.prepare('SELECT p.*, c.name AS client_name, c.store_name, c.phone AS client_phone, c.logo FROM payments p JOIN clients c ON c.id = p.client_id ORDER BY p.date DESC, p.created_at DESC LIMIT 5000').all();
+    const due = Object.fromEntries((await loadClientsDerived(ctx, "WHERE status != 'former'")).filter((c) => c.sub).map((c) => [c.id, { next_due: c.sub.next_due, days_to_due: c.sub.days_to_due, pay_status: c.sub.pay_status }]));
+    return json({ today: ctx.today, items: results.map((p) => ({ ...p, client_due: due[p.client_id] || null })) });
   },
   'POST /api/clients/:id/payments': async (ctx) => {
     need(ctx, 'payments.create');
@@ -376,6 +378,12 @@ export const clientRoutes = {
     const b = await readJson(ctx.req);
     const amount = numOrNull(b.amount);
     if (!amount || amount <= 0) throw bad('أدخل مبلغًا صحيحًا');
+    const clientKey = str(b.client_key, 64);
+    if (clientKey) {  // same form submitted twice (double tap / retry) → return the first result
+      const dup = await ctx.env.DB.prepare('SELECT id, next_due_date FROM payments WHERE client_key = ?').bind(clientKey).first();
+      if (dup) return json({ id: dup.id, next_due: dup.next_due_date, duplicate: true });
+    }
+    const receipt = b.receipt ? checkReceipt(b.receipt) : null;
     const type = oneOf(b.type, Object.keys(PAY_TYPES), 'subscription');
     let subId = str(b.subscription_id, 40);
     if (!subId && type === 'subscription') subId = (await currentSub(ctx, c.id))?.id || null;
@@ -394,16 +402,21 @@ export const clientRoutes = {
       const [cur] = await loadClientsDerived(ctx, 'WHERE id = ?', [c.id]);
       prevDue = cur?.sub?.id === sub.id ? cur.sub.next_due || null : null;
     }
-    Object.assign(row, { prev_due_date: prevDue, next_due_date: nextDue, next_due_days: nextDue ? nextDays : null });
+    Object.assign(row, { prev_due_date: prevDue, next_due_date: nextDue, next_due_days: nextDue ? nextDays : null, client_key: clientKey, has_receipt: receipt ? 1 : 0, created_by: ctx.user.id });
     const ins = buildInsert('payments', row);
     const stmts = [ctx.env.DB.prepare(ins.sql).bind(...ins.args)];
+    if (receipt) stmts.push(ctx.env.DB.prepare('INSERT INTO payment_receipts (payment_id, mime, size, data, uploaded_by, uploaded_at) VALUES (?,?,?,?,?,?)').bind(row.id, receipt.mime, receipt.size, receipt.data, ctx.user.id, nowISO()));
     if (sub && nextDue) stmts.push(ctx.env.DB.prepare('UPDATE subscriptions SET next_due_override = ?, updated_at = ? WHERE id = ?').bind(nextDue, nowISO(), sub.id));
     if (b.alert && typeof b.alert === 'object') {
       const t = /^\d{2}:\d{2}$/.test(String(b.alert.time || '')) ? b.alert.time : null;
       stmts.push(ctx.env.DB.prepare('UPDATE clients SET pay_alert_enabled = ?, pay_alert_days = ?, pay_alert_time = ? WHERE id = ?')
         .bind(b.alert.enabled ? 1 : 0, Math.min(90, Math.max(0, intOrNull(b.alert.days) ?? 1)), t, c.id));
     }
-    await ctx.env.DB.batch(stmts);
+    try { await ctx.env.DB.batch(stmts); }
+    catch (e) {
+      if (clientKey && /UNIQUE/i.test(String(e.message))) { const dup = await ctx.env.DB.prepare('SELECT id, next_due_date FROM payments WHERE client_key = ?').bind(clientKey).first(); if (dup) return json({ id: dup.id, next_due: dup.next_due_date, duplicate: true }); }
+      throw e;
+    }
     if (sub && mode === 'auto') {  // record what the automatic schedule gives after this payment
       const [after] = await loadClientsDerived(ctx, 'WHERE id = ?', [c.id]);
       if (after?.sub?.next_due) await ctx.env.DB.prepare('UPDATE payments SET next_due_date = ? WHERE id = ?').bind(after.sub.next_due, row.id).run();
@@ -412,6 +425,7 @@ export const clientRoutes = {
     await touch(ctx, c.id);
     await log(ctx, 'تسجيل دفعة', { entity: 'payment', entity_id: row.id, client_id: c.id, details: `${amount} — ${PAY_METHODS[row.method]} — استلام ${row.date}${nextDue ? ` — الدفعة القادمة ${nextDue}${nextDays && mode === 'days' ? ` (بعد ${nextDays} يوم)` : ''}` : ''}` });
     if (nextDue && b.alert?.enabled) await log(ctx, 'جدولة تنبيه الدفعة القادمة', { entity: 'alert', entity_id: c.id, client_id: c.id, details: `${nextDue}${b.alert.days ? ` — قبلها بـ ${b.alert.days} يوم` : ''}${b.alert.time ? ` — الساعة ${b.alert.time}` : ''}` });
+    if (receipt) await log(ctx, 'إرفاق صورة حوالة', { entity: 'payment', entity_id: row.id, client_id: c.id, details: `${Math.round(receipt.size / 1024)} KB` });
     return json({ id: row.id, next_due: nextDue });
   },
   'PUT /api/payments/:id': async (ctx) => {
@@ -421,20 +435,77 @@ export const clientRoutes = {
     const b = await readJson(ctx.req);
     const amount = numOrNull(b.amount);
     if (!amount || amount <= 0) throw bad('أدخل مبلغًا صحيحًا');
-    const up = buildUpdate('payments', p.id, { amount, date: dateOrNull(b.date) || p.date, method: oneOf(b.method, Object.keys(PAY_METHODS), p.method), period: str(b.period, 100), type: oneOf(b.type, Object.keys(PAY_TYPES), p.type), reference: str(b.reference, 100), notes: str(b.notes, 1000) });
+    const next = { amount, date: dateOrNull(b.date) || p.date, method: oneOf(b.method, Object.keys(PAY_METHODS), p.method), period: str(b.period, 100), type: oneOf(b.type, Object.keys(PAY_TYPES), p.type), reference: str(b.reference, 100), notes: str(b.notes, 1000) };
+    if (next.date > ctx.today) throw bad('تاريخ التحويل لا يمكن أن يكون في المستقبل');
+    const LBL = { amount: 'المبلغ', date: 'تاريخ التحويل', method: 'طريقة الدفع', period: 'الفترة', type: 'النوع', reference: 'المرجع', notes: 'الملاحظات' };
+    const changes = Object.keys(next).filter((k) => String(next[k] ?? '') !== String(p[k] ?? '')).map((k) => `${LBL[k]}: ${p[k] ?? '—'} → ${next[k] ?? '—'}`);
+    const up = buildUpdate('payments', p.id, { ...next, updated_at: nowISO() });
     await ctx.env.DB.prepare(up.sql).bind(...up.args).run();
-    await log(ctx, 'تعديل دفعة', { entity: 'payment', entity_id: p.id, client_id: p.client_id, details: `${p.amount} → ${amount}` });
+    await log(ctx, 'تعديل دفعة', { entity: 'payment', entity_id: p.id, client_id: p.client_id, details: changes.join(' • ') || 'بدون تغيير' });
+    return json({ ok: true });
+  },
+  'GET /api/payments/:id': async (ctx) => {
+    need(ctx, 'payments.view');
+    const p = await ctx.env.DB.prepare('SELECT p.*, c.name AS client_name, c.store_name, c.phone AS client_phone, c.logo, u.display_name AS created_by_name FROM payments p JOIN clients c ON c.id = p.client_id LEFT JOIN users u ON u.id = p.created_by WHERE p.id = ?').bind(ctx.params.id).first();
+    if (!p) throw notFound('الدفعة غير موجودة');
+    const r = await ctx.env.DB.prepare('SELECT mime, size, uploaded_at FROM payment_receipts WHERE payment_id = ?').bind(p.id).first();
+    const { results: history } = await ctx.env.DB.prepare("SELECT action, details, user_name, created_at FROM activity_log WHERE entity = 'payment' AND entity_id = ? ORDER BY created_at DESC").bind(p.id).all();
+    const [c] = await loadClientsDerived(ctx, 'WHERE id = ?', [p.client_id]);
+    return json({ payment: p, receipt: r || null, history, client_due: c?.sub ? { next_due: c.sub.next_due, days_to_due: c.sub.days_to_due, pay_status: c.sub.pay_status, amount_due: c.sub.amount_due, partial: c.sub.partial } : null });
+  },
+  // Receipt image — authenticated only, never cached publicly.
+  'GET /api/payments/:id/receipt': async (ctx) => {
+    need(ctx, 'payments.view');
+    const r = await ctx.env.DB.prepare('SELECT mime, data FROM payment_receipts WHERE payment_id = ?').bind(ctx.params.id).first();
+    if (!r) throw notFound('لا توجد صورة حوالة');
+    const bin = Uint8Array.from(atob(r.data), (ch) => ch.charCodeAt(0));
+    return new Response(bin, { headers: { 'content-type': r.mime, 'cache-control': 'private, no-store', 'content-disposition': 'inline', 'x-content-type-options': 'nosniff' } });
+  },
+  'PUT /api/payments/:id/receipt': async (ctx) => {
+    need(ctx, 'payments.create');
+    const p = await ctx.env.DB.prepare('SELECT id, client_id, has_receipt FROM payments WHERE id = ?').bind(ctx.params.id).first();
+    if (!p) throw notFound();
+    const rc = checkReceipt((await readJson(ctx.req)).receipt);
+    await ctx.env.DB.batch([
+      ctx.env.DB.prepare('INSERT INTO payment_receipts (payment_id, mime, size, data, uploaded_by, uploaded_at) VALUES (?,?,?,?,?,?) ON CONFLICT(payment_id) DO UPDATE SET mime = excluded.mime, size = excluded.size, data = excluded.data, uploaded_by = excluded.uploaded_by, uploaded_at = excluded.uploaded_at')
+        .bind(p.id, rc.mime, rc.size, rc.data, ctx.user.id, nowISO()),
+      ctx.env.DB.prepare('UPDATE payments SET has_receipt = 1, updated_at = ? WHERE id = ?').bind(nowISO(), p.id),
+    ]);
+    await log(ctx, p.has_receipt ? 'استبدال صورة الحوالة' : 'إرفاق صورة حوالة', { entity: 'payment', entity_id: p.id, client_id: p.client_id, details: `${Math.round(rc.size / 1024)} KB` });
+    return json({ ok: true });
+  },
+  'DELETE /api/payments/:id/receipt': async (ctx) => {
+    need(ctx, 'payments.create');
+    const p = await ctx.env.DB.prepare('SELECT id, client_id FROM payments WHERE id = ?').bind(ctx.params.id).first();
+    if (!p) throw notFound();
+    await ctx.env.DB.batch([ctx.env.DB.prepare('DELETE FROM payment_receipts WHERE payment_id = ?').bind(p.id), ctx.env.DB.prepare('UPDATE payments SET has_receipt = 0, updated_at = ? WHERE id = ?').bind(nowISO(), p.id)]);
+    await log(ctx, 'حذف صورة الحوالة', { entity: 'payment', entity_id: p.id, client_id: p.client_id, details: 'سجل الدفعة باقٍ' });
     return json({ ok: true });
   },
   'DELETE /api/payments/:id': async (ctx) => {
     need(ctx, 'payments.create');
     const p = await ctx.env.DB.prepare('SELECT * FROM payments WHERE id = ?').bind(ctx.params.id).first();
     if (!p) throw notFound();
+    await ctx.env.DB.prepare('DELETE FROM payment_receipts WHERE payment_id = ?').bind(p.id).run();
     await ctx.env.DB.prepare('DELETE FROM payments WHERE id = ?').bind(p.id).run();
     await log(ctx, 'حذف دفعة', { entity: 'payment', entity_id: p.id, client_id: p.client_id, details: String(p.amount) });
     return json({ ok: true });
   },
 };
+
+/** Validates a receipt image {mime, data(base64)}: real JPEG/PNG/WebP bytes, at most 1.3 MB. */
+function checkReceipt(r) {
+  const mime = String(r?.mime || '');
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(mime)) throw bad('صورة الحوالة يجب أن تكون JPG أو PNG أو WebP');
+  const data = String(r?.data || '').replace(/^data:[^,]+,/, '');
+  if (!/^[A-Za-z0-9+/=]+$/.test(data)) throw bad('ملف الصورة غير صالح');
+  const size = Math.floor((data.length * 3) / 4);
+  if (size > 1.3 * 1024 * 1024) throw bad('حجم الصورة كبير — الحد 1.3 ميجابايت');
+  const head = atob(data.slice(0, 16));
+  const ok = mime === 'image/jpeg' ? head.charCodeAt(0) === 0xff && head.charCodeAt(1) === 0xd8 : mime === 'image/png' ? head.slice(1, 4) === 'PNG' : head.slice(0, 4) === 'RIFF';
+  if (!ok) throw bad('محتوى الملف لا يطابق نوع الصورة');
+  return { mime, data, size };
+}
 
 function stripMoney(c) {
   return { ...c, total_paid_all: null, sub: c.sub ? { ...c.sub, amount: null, paid: null, remaining: null } : null };

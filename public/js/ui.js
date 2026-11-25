@@ -92,6 +92,7 @@ export function sheet({ title, body, foot, onMount, wide }) {
     let done = false;
     const close = (v) => {
       if (done) return; done = true;
+      document.removeEventListener('keydown', onKey);
       wrap.remove(); if (!$('.sheet-wrap')) document.body.style.overflow = '';
       window.removeEventListener('popstate', onPop);
       resolve(v);
@@ -99,7 +100,8 @@ export function sheet({ title, body, foot, onMount, wide }) {
     const onPop = () => close(undefined);
     window.addEventListener('popstate', onPop);
     wrap.addEventListener('click', (e) => { if (e.target === wrap || e.target.closest('[data-close]')) close(undefined); });
-    wrap.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(undefined); });
+    const onKey = (e) => { if (e.key === 'Escape' && [...document.querySelectorAll('.sheet-wrap')].pop() === wrap) close(undefined); };
+    document.addEventListener('keydown', onKey);
     onMount?.(wrap.querySelector('.sheet'), close);
     const first = wrap.querySelector('input:not([type=hidden]):not([readonly]), select, textarea');
     if (first && window.innerWidth > 720) setTimeout(() => first.focus(), 50);
