@@ -36,8 +36,12 @@ export async function loadLeaveDays(db, userIds, from, to) {
 
 /** Planned shift resolver for many employees at once. */
 export async function shiftContext(ctx, userIds, from, to) {
-  const [sch, ovr] = await Promise.all([loadSchedules(ctx.env.DB, userIds), loadOverrides(ctx.env.DB, userIds, from, to)]);
-  return (userId) => (date) => resolveShift(date, sch[userId] || [], ovr[userId] || {}, ctx.off);
+  const [sch, ovr, starts] = await Promise.all([
+    loadSchedules(ctx.env.DB, userIds), loadOverrides(ctx.env.DB, userIds, from, to),
+    userIds.length ? ctx.env.DB.prepare(`SELECT user_id, start_date FROM employee_profiles WHERE user_id IN (${inList(userIds)})`).bind(...userIds).all().then((r) => Object.fromEntries(r.results.map((x) => [x.user_id, x.start_date]))) : {},
+  ]);
+  // no planned shift (so no absence) before the employee's start date
+  return (userId) => (date) => (starts[userId] && date < starts[userId] ? null : resolveShift(date, sch[userId] || [], ovr[userId] || {}, ctx.off));
 }
 
 export async function attendanceFor(ctx, userIds, from, to) {

@@ -80,18 +80,17 @@ async function myProfile(ctx) {
   return p;
 }
 
-/** Which shift does "now" belong to? Considers yesterday's overnight shift and today's. */
+/** Which shift does "now" belong to? Considers yesterday's overnight shift, today's, and an early shift starting before the business-day boundary. */
 async function currentShift(ctx) {
-  const today = ctx.today, yest = addDays(today, -1);
-  const shiftFor = (await shiftContext(ctx, [ctx.user.id], yest, today))(ctx.user.id);
+  const today = ctx.today, yest = addDays(today, -1), tom = addDays(today, 1);
+  const shiftFor = (await shiftContext(ctx, [ctx.user.id], yest, tom))(ctx.user.id);
   const early = (Number(ctx.settings.early_checkin_minutes) || 90) * 60e3;
-  const y = shiftFor(yest), t = shiftFor(today);
-  if (y && !y.off && ctx.nowMs >= y.startMs - early && ctx.nowMs <= y.endMs) return { date: yest, shift: y };
-  if (t && !t.off) {
-    if (ctx.nowMs < t.startMs - early) return { date: today, shift: t, tooEarly: true };
-    if (ctx.nowMs > t.endMs) return { date: today, shift: t, ended: true };
-    return { date: today, shift: t };
+  for (const date of [yest, today, tom]) {
+    const s = shiftFor(date);
+    if (s && !s.off && ctx.nowMs >= s.startMs - early && ctx.nowMs <= s.endMs) return { date, shift: s };
   }
+  const t = shiftFor(today);
+  if (t && !t.off) return ctx.nowMs < t.startMs - early ? { date: today, shift: t, tooEarly: true } : { date: today, shift: t, ended: true };
   return { date: today, shift: null };
 }
 

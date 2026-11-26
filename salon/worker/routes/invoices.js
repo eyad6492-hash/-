@@ -50,7 +50,9 @@ export const invoiceRoutes = {
     const q = ctx.url.searchParams;
     const kind = q.get('kind');
     let owner = null, visible = 1;
-    if (kind === 'invoice') {
+    if (kind === 'invoice' && q.get('user_id') && q.get('user_id') !== ctx.user.id) {
+      need(ctx, 'invoices.review'); owner = q.get('user_id'); // reviewer adding a photo to a barber's invoice
+    } else if (kind === 'invoice') {
       const p = await ctx.env.DB.prepare('SELECT works_shifts FROM employee_profiles WHERE user_id = ?').bind(ctx.user.id).first();
       if (!p?.works_shifts) throw forbidden('حسابك غير مفعل لتسجيل الفواتير');
       owner = ctx.user.id;
