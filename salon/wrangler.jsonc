@@ -1,0 +1,19 @@
+{
+  // Mr. Vibe Salon – مستر فايب — Cloudflare Workers config
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "mr-vibe-salon",
+  "main": "worker/index.js",
+  "compatibility_date": "2025-09-01",
+  // Static files are bundled into the Worker by scripts/embed-assets.mjs (npm run build)
+  "rules": [{ "type": "Data", "globs": ["**/*.bin"], "fallthrough": true }],
+  "d1_databases": [
+    { "binding": "DB", "database_name": "mr-vibe-salon-db", "database_id": "4c366173-e763-4b0b-b5e6-23f52d89fe45", "migrations_dir": "migrations" }
+  ],
+  // Optional: private R2 bucket for photos/PDFs. Without it files are stored (chunked) in D1.
+  // After enabling R2 in the Cloudflare dashboard: npx wrangler r2 bucket create mr-vibe-salon-files, then uncomment:
+  // "r2_buckets": [{ "binding": "FILES", "bucket_name": "mr-vibe-salon-files" }],
+  "observability": { "enabled": true },
+  // Every 15 minutes: late / absence alerts to managers
+  "triggers": { "crons": ["*/15 * * * *"] }
+  // Secret (never commit): npx wrangler secret put SETUP_TOKEN
+}

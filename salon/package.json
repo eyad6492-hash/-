@@ -1,0 +1,19 @@
+{
+  "name": "mr-vibe-salon",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/embed-assets.mjs",
+    "dev": "npm run build && wrangler dev --local",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
+    "deploy": "npm run build && wrangler d1 migrations apply DB --remote && wrangler deploy",
+    "test": "npm run build && node tests/api.test.mjs",
+    "test:ui": "npm run build && node tests/ui.test.mjs",
+    "icons": "python3 scripts/build-icons.py"
+  },
+  "devDependencies": {
+    "wrangler": "4.167.0"
+  }
+}
