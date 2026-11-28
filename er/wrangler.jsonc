@@ -1,0 +1,22 @@
+{
+  // E&R — Cloudflare Workers config
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "e-and-r",
+  "main": "worker/index.js",
+  "compatibility_date": "2025-09-01",
+  // Static files are bundled into the Worker by scripts/embed-assets.mjs (npm run build)
+  "rules": [{ "type": "Data", "globs": ["**/*.bin"], "fallthrough": true }],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "e-and-r-db",
+      "database_id": "79e16928-f354-45c8-95f5-cb8262ddde0b",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "observability": { "enabled": true },
+  // Reminders: every 15 minutes (each reminder is sent once, in each person's time zone)
+  "triggers": { "crons": ["*/15 * * * *"] }
+  // Secrets (never commit): npx wrangler secret put SETUP_TOKEN
+  // Optional e-mail password reset: RESEND_API_KEY (secret) + MAIL_FROM (var)
+}
