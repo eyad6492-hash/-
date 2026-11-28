@@ -1,0 +1,26 @@
+-- مواعيد تسميع القرآن (Rawan writes, both read)
+CREATE TABLE quran (
+  id TEXT PRIMARY KEY,
+  date TEXT,
+  time TEXT,
+  surah INTEGER,
+  from_ayah INTEGER,
+  to_ayah INTEGER,
+  part TEXT,
+  teacher TEXT,
+  notes TEXT,
+  remind TEXT,
+  status TEXT,
+  done_date TEXT,
+  done_time TEXT,
+  done_surah INTEGER,
+  done_from INTEGER,
+  done_to INTEGER,
+  rating INTEGER,
+  review_notes TEXT,
+  done_notes TEXT,
+  created_by TEXT NOT NULL,
+  updated_by TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);

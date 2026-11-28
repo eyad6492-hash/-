@@ -5,6 +5,7 @@ import { mySettings, parseSettings, partnerOf, publicUser, users } from '../lib/
 import { notify } from '../lib/notify.js';
 import { cycleStats } from '../../public/js/cycle-math.js';
 import { todayIn } from '../../public/js/dates.js';
+import { surahAyahs } from '../../public/js/quran-data.js';
 
 const LIM = { str: 300, text: 5000 };
 function coerce(type, v, userIds, label) {
@@ -62,6 +63,11 @@ async function logChange(ctx, col, rowId, op, title) {
   const def = COLLECTIONS[col];
   await ctx.env.DB.prepare('INSERT INTO changes (col, row_id, op, actor, owner_only, title, at) VALUES (?, ?, ?, ?, ?, ?, ?)')
     .bind(col, rowId, op, ctx.user.id, def?.ownerOnly ? ctx.user.id : null, title ? String(title).slice(0, 120) : null, nowISO()).run();
+  if (col === 'cycles') {
+    // the partner's open app refreshes its read-only cycle view (only metadata travels; data is fetched with permission checks)
+    const p = await partnerOf(ctx.env, ctx.user.id);
+    if (p && parseSettings(ctx.user.settings).cycle.share !== 'none') await ctx.env.DB.prepare('INSERT INTO changes (col, row_id, op, actor, owner_only, at) VALUES (?, ?, ?, ?, ?, ?)').bind('cycles_partner', '*', op, ctx.user.id, p.id, nowISO()).run();
+  }
 }
 export { logChange };
 
@@ -100,6 +106,7 @@ const NEW_HOOKS = {
   needs: (r, p, me, v) => ({ title: `${me} ${v('أضاف')} غرضًا ناقصًا`, body: r.name, link: '#/s/needs' }),
   reminders: (r, p, me) => (r.target === p.id ? { title: `${me} يذكّرك`, body: `${r.title} — ${r.date}${r.time ? ' ' + r.time : ''}`, link: '#/s/reminders' } : null),
   joys: () => null,
+  quran: (r, p, me) => ({ title: `${me} أضافت موعد تسميع 🤍`, body: `${r.date}${r.time ? ' ' + r.time : ''}`, link: '#/quran' }),
 };
 async function afterWrite(ctx, col, before, after) {
   const partner = await partnerOf(ctx.env, ctx.user.id);
@@ -125,6 +132,8 @@ async function afterWrite(ctx, col, before, after) {
   } else if (created && NEW_HOOKS[col]) {
     const h = NEW_HOOKS[col](after, partner, me, v, forPartner);
     if (h) await notify(ctx, partner, { kind: col, group: COLLECTIONS[col].group, actor: ctx.user.id, ...h });
+  } else if (!created && col === 'quran' && before.status === 'scheduled' && ['done', 'partial'].includes(after.status)) {
+    await notify(ctx, partner, { kind: 'quran_done', group: 'quran', title: `${me} ${after.status === 'done' ? 'أتمّت' : 'سمّعت جزءًا من'} التسميع 🤍`, body: 'ما شاء الله — اطّلع على السجل', link: '#/quran', actor: ctx.user.id });
   } else if (!created && col === 'upsets' && before.status !== 'needs_talk' && after.status === 'needs_talk') {
     await notify(ctx, partner, { kind: 'upsets', group: 'upsets', title: 'موقف يحتاج إلى نقاش هادئ', body: after.title, link: '#/s/upsets', actor: ctx.user.id });
   } else if (col === 'moods' && created) {
@@ -136,7 +145,7 @@ async function afterWrite(ctx, col, before, after) {
 async function partnerCycle(ctx, partner) {
   if (!partner) return null;
   const s = parseSettings(partner.settings);
-  if (!s.cycle.enabled || s.cycle.share !== 'prediction') return null;
+  if (!s.cycle.enabled || !['prediction', 'full'].includes(s.cycle.share)) return null;
   const { results } = await ctx.env.DB.prepare('SELECT start_date, end_date FROM cycles WHERE created_by = ? ORDER BY start_date DESC LIMIT 12').bind(partner.id).all();
   const st = cycleStats(results, todayIn(s.tz));
   return { next: st.next, in_period: st.inPeriod, days_to_next: st.daysToNext };
@@ -179,7 +188,7 @@ export const dataRoutes = {
     const ids = {};
     for (const c of ch) {
       if (c.actor !== ctx.user.id) out.events.push({ col: c.col, op: c.op, actor: c.actor, title: c.title, row_id: c.row_id });
-      if (c.col === 'users' || c.col === 'space' || COLLECTIONS[c.col]?.ownerOnly) { out.meta = true; continue; }
+      if (c.col === 'users' || c.col === 'space' || c.col === 'cycles_partner' || COLLECTIONS[c.col]?.ownerOnly) { out.meta = true; continue; }
       (ids[c.col] ||= new Set()).add(c.row_id);
     }
     for (const [col, set] of Object.entries(ids)) {
@@ -210,6 +219,7 @@ export const dataRoutes = {
     const col = colOr404(ctx.params.col);
     const def = COLLECTIONS[col];
     if (col === 'cycles') await requireCycleAccess(ctx);
+    if (def.writerLetter && ctx.user.letter !== def.writerLetter) throw forbidden('يمكنك الاطلاع فقط — الإضافة والتعديل من صاحبة القسم');
     const body = await readJson(ctx.req);
     const ids = (await users(ctx.env)).map((u) => u.id);
     const row = cleanInput(col, body, ids, false, ctx.user);
@@ -237,6 +247,7 @@ export const dataRoutes = {
     if (col === 'cycles') await requireCycleAccess(ctx);
     const before = await getRow(ctx, col, ctx.params.id);
     if (def.ownerWrite && before.created_by !== ctx.user.id) throw forbidden('هذا العنصر خاص بالطرف الآخر');
+    if (def.writerLetter && ctx.user.letter !== def.writerLetter) throw forbidden('يمكنك الاطلاع فقط — الإضافة والتعديل من صاحبة القسم');
     const body = ctx.body || await readJson(ctx.req);
     const ids = (await users(ctx.env)).map((u) => u.id);
     const patch = cleanInput(col, body, ids, true, ctx.user);
@@ -262,6 +273,7 @@ export const dataRoutes = {
     if (col === 'cycles') await requireCycleAccess(ctx);
     const row = await getRow(ctx, col, ctx.params.id);
     if (def.ownerWrite && row.created_by !== ctx.user.id) throw forbidden('هذا العنصر خاص بالطرف الآخر');
+    if (def.writerLetter && ctx.user.letter !== def.writerLetter) throw forbidden('يمكنك الاطلاع فقط — الإضافة والتعديل من صاحبة القسم');
     // cascade to children
     for (const [child, cdef] of Object.entries(COLLECTIONS)) {
       if (cdef.parent?.col !== col) continue;
@@ -279,7 +291,17 @@ export const dataRoutes = {
 };
 
 /** Server-maintained fields (who completed / bought something and when). */
+function checkQuran(r) {
+  for (const [sk, a, b] of [['surah', 'from_ayah', 'to_ayah'], ['done_surah', 'done_from', 'done_to']]) {
+    if (r[sk] == null) continue;
+    const n = surahAyahs(r[sk]); if (!n) throw bad('اختر السورة');
+    if (r[a] != null && (r[a] < 1 || r[a] > n)) throw bad(`رقم الآية خارج السورة (1–${n})`);
+    if (r[b] != null && (r[b] < 1 || r[b] > n)) throw bad(`رقم الآية خارج السورة (1–${n})`);
+    if (r[a] != null && r[b] != null && r[b] < r[a]) throw bad('آية النهاية قبل آية البداية');
+  }
+}
 function applyAuto(col, row, before, userId) {
+  if (col === 'quran') checkQuran({ ...(before || {}), ...row });
   for (const k of ['completed_at', 'completed_by', 'done_at', 'done_by', 'bought_at', 'bought_by']) delete row[k]; // never client-set
   if (col === 'tasks' && row.status !== undefined) {
     if (row.status === 'completed' && before?.status !== 'completed') { row.completed_at = nowISO(); row.completed_by = userId; }
@@ -306,6 +328,7 @@ function applyAuto(col, row, before, userId) {
     if (col === 'upsets' && !row.status) row.status = 'unread';
     const DEF = { reminders: { status: 'pending', repeat: 'none' }, daily_tasks: { status: 'pending' }, urgent: { status: 'open' }, appointments: { status: 'upcoming' }, cravings: { status: 'open' }, outings: { status: 'planned' }, confessions: { status: 'open' } };
     for (const [k, val] of Object.entries(DEF[col] || {})) if (!row[k]) row[k] = val;
+    if (col === 'quran' && !row.status) row.status = 'scheduled';
   }
   for (const k of ['completed_at', 'completed_by', 'done_at', 'done_by', 'bought_at', 'bought_by']) if (row[k] === undefined) delete row[k];
 }

@@ -217,6 +217,47 @@ async function main() {
     assert.ok(rem.date > t.slice(0, 10), 'weekly reminder should move to next week');
   });
 
+  console.log('\nالدورة (مشاركة) وتسميع القرآن');
+  await test('بطاقة الدورة لروان: ملخص يعمل حتى مع القفل بالرمز', async () => {
+    const c = client(); ok(await c('POST', '/api/auth/login', { email: 'rawan@example.com', password: 'password-2' }), 'login'); // new session = locked
+    assert.equal((await c('GET', '/api/c/cycles')).status, 423);
+    const sm = ok(await c('GET', '/api/cycle/summary'), 'sum'); assert.equal(sm.enabled, true); assert.ok(sm.next); assert.equal(sm.count, 2);
+    assert.equal(ok(await eyad('GET', '/api/cycle/summary'), 'e').enabled, false);
+  });
+  await test('إياد يرى الدورة بحسب مستوى المشاركة الذي تختاره روان (للاطلاع فقط)', async () => {
+    ok(await rawan('PATCH', '/api/me', { settings: { cycle: { share: 'none' } } }), 's0');
+    assert.equal(ok(await eyad('GET', '/api/cycle/partner'), 'p0').share, 'none');
+    ok(await rawan('PATCH', '/api/me', { settings: { cycle: { share: 'prediction' } } }), 's1');
+    const p1 = ok(await eyad('GET', '/api/cycle/partner'), 'p1'); assert.equal(p1.share, 'prediction'); assert.equal(p1.items, undefined); assert.ok(p1.summary.next);
+    ok(await rawan('PATCH', '/api/me', { settings: { cycle: { share: 'full' } } }), 's2');
+    const cur = ok(await eyad('GET', '/api/bootstrap'), 'b').cursor;
+    ok(await rawan('PATCH', `/api/c/cycles/${cycleId}`, { notes: 'تعب خفيف' }), 'edit');
+    const sy = ok(await eyad('GET', `/api/sync?since=${cur}`), 'sync'); assert.equal(sy.meta, true, 'partner app is told to refresh');
+    const p2 = ok(await eyad('GET', '/api/cycle/partner'), 'p2'); assert.equal(p2.share, 'full'); assert.ok(p2.items.some((x) => x.notes === 'تعب خفيف'));
+    assert.equal((await eyad('PATCH', `/api/c/cycles/${cycleId}`, { notes: 'x' })).status, 404, 'partner cannot edit');
+  });
+  let qid;
+  await test('تسميع القرآن: روان تضيف وتعدّل، إياد يطّلع فقط', async () => {
+    qid = ok(await rawan('POST', '/api/c/quran', { date: '2030-01-15', time: '19:30', surah: 18, from_ayah: 1, to_ayah: 10, teacher: 'أ. نورة', remind: 'h1' }), 'q').item.id;
+    assert.equal(ok(await eyad('GET', '/api/bootstrap'), 'b').data.quran.find((x) => x.id === qid).status, 'scheduled');
+    assert.ok(ok(await eyad('GET', '/api/notifications'), 'n').items.some((x) => x.kind === 'quran'));
+    assert.equal((await eyad('POST', '/api/c/quran', { date: '2030-01-16', surah: 1 })).status, 403);
+    assert.equal((await eyad('PATCH', `/api/c/quran/${qid}`, { notes: 'x' })).status, 403);
+    assert.equal((await eyad('DELETE', `/api/c/quran/${qid}`)).status, 403);
+    assert.equal((await rawan('POST', '/api/c/quran', { date: '2030-01-16', surah: 18, from_ayah: 5, to_ayah: 200 })).status, 400, 'Al-Kahf has 110 verses');
+    assert.equal((await rawan('POST', '/api/c/quran', { date: '2030-01-16', surah: 18, from_ayah: 9, to_ayah: 3 })).status, 400);
+  });
+  await test('تسميع القرآن: «تم تسميعه» يوثّق في السجل ويُشعر إياد', async () => {
+    const d = ok(await rawan('PATCH', `/api/c/quran/${qid}`, { status: 'partial', done_date: '2030-01-15', done_time: '19:40', done_surah: 18, done_from: 1, done_to: 8, rating: 4, review_notes: 'مراجعة الآيات 9-10' }), 'doc').item;
+    assert.equal(d.status, 'partial'); assert.equal(d.done_to, 8);
+    assert.ok(ok(await eyad('GET', '/api/notifications'), 'n').items.some((x) => x.kind === 'quran_done'));
+    const t = new Date(Date.now() + 3 * 3600000 + 20 * 60000).toISOString();
+    ok(await rawan('POST', '/api/c/quran', { date: t.slice(0, 10), time: t.slice(11, 16), surah: 67, remind: 'm30' }), 'soon');
+    await fetch(BASE + '/__scheduled?cron=*/15+*+*+*+*'); await new Promise((r) => setTimeout(r, 800));
+    assert.ok(ok(await rawan('GET', '/api/notifications'), 'n').items.some((x) => x.title === 'تذكير بموعد التسميع 🤍'));
+    assert.ok(!ok(await eyad('GET', '/api/notifications'), 'n').items.some((x) => x.title === 'تذكير بموعد التسميع 🤍'), 'reminder is for Rawan only');
+  });
+
   console.log('\nأعياد ميلادنا');
   await test('تواريخ الميلاد الافتراضية والرسائل', async () => {
     const d = ok(await eyad('GET', '/api/bday'), 'b');

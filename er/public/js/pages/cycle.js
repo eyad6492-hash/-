@@ -46,8 +46,9 @@ function settingsSheet(rerender) {
   const tg = (k, label, hint, on) => `<div class="set-row"><div><div style="font-weight:500">${label}</div><div class="tiny muted">${hint}</div></div><label class="toggle"><input type="checkbox" data-t="${k}" ${on ? 'checked' : ''}><i></i></label></div>`;
   openSheet({
     title: 'خصوصية القسم', en: 'الخصوصية',
-    body: `${tg('show_home', 'إظهار ملخص في الرئيسية', 'لك فقط — لا يظهر للطرف الآخر', c.show_home)}
-      ${tg('share', `مشاركة الموعد المتوقع مع ${esc(store.partner?.name || 'الطرف الآخر')}`, 'يرى الموعد التقريبي فقط، بدون أي تفاصيل أو أعراض', c.share === 'prediction')}
+    body: `${tg('home_card', 'إظهار بطاقة الدورة في الرئيسية', 'في أسفل صفحتك الرئيسية — لك فقط، لا تظهر في رئيسية الطرف الآخر', c.home_card !== false)}
+      <div class="field" style="margin:10px 0 4px"><span>المشاركة مع ${esc(store.partner?.name || 'الطرف الآخر')}</span><div class="seg">${[['none', 'بدون مشاركة'], ['prediction', 'الموعد المتوقع فقط'], ['full', 'كل البيانات (للاطلاع)']].map(([v, l]) => `<button type="button" data-share="${v}" class="${(c.share || 'none') === v ? 'on' : ''}">${l}</button>`).join('')}</div>
+        <div class="hint">«كل البيانات» تتيح ${esc(store.partner?.name || 'للطرف الآخر')} الاطلاع على السجل والتقويم والأعراض من قسم مستقل — دون تعديل، ودون ظهورها في رئيسيته. تتحدث تلقائيًا مع كل تعديل منك.</div></div>
       ${tg('fertility', 'عرض فترة الخصوبة التقديرية', 'اختياري — تقدير تقريبي', c.fertility)}
       ${tg('hide', 'إخفاء القسم من قائمة المزيد', 'يبقى متاحًا من الإعدادات ← الخصوصية', c.hide)}
       <div class="divider"></div>
@@ -60,6 +61,7 @@ function settingsSheet(rerender) {
         const k = e.target.dataset.t; if (!k) return;
         try { await setCycle(k === 'share' ? { share: e.target.checked ? 'prediction' : 'none' } : { [k]: e.target.checked }); toast('تم الحفظ'); } catch (err) { toastErr(err); }
       });
+      sh.querySelectorAll('[data-share]').forEach((b) => { b.onclick = async () => { try { await setCycle({ share: b.dataset.share }); sh.querySelectorAll('[data-share]').forEach((x) => x.classList.toggle('on', x === b)); toast('تم الحفظ'); } catch (err) { toastErr(err); } }; });
       sh.querySelector('[data-pin]').onclick = () => { close(); setTimeout(() => pinSheet(rerender), 240); };
       sh.querySelector('[data-lock]')?.addEventListener('click', async () => { await post('/api/cycle/lock'); st.locked = true; close(); rerender(); });
       sh.querySelector('[data-wipe]').onclick = () => { close(); setTimeout(() => openForm({ title: 'حذف بيانات الدورة', fields: [{ type: 'info', html: 'سيتم حذف كل السجلات نهائيًا ولا يمكن استرجاعها.' }, { k: 'password', label: 'كلمة مرور الحساب', type: 'password', required: true }], submit: 'حذف نهائي', onSubmit: async (v) => { await post('/api/data/wipe', { scope: 'cycle', password: v.password }); toast('تم الحذف'); await load(); rerender(); } }), 240); };
@@ -85,13 +87,7 @@ export default {
     const me = store.me, c = me.settings.cycle, t = today();
     const rerender = () => this.render(el, {}, { full: false });
     const isOwner = me.letter === 'R' || c.enabled;
-    if (!isOwner) {
-      const pc = store.partner_cycle;
-      el.innerHTML = `<div class="page">${pageHead({ en: 'الدورة', ar: `دورة ${store.partner?.name || ''}`, back: '#/more' })}
-        ${pc ? `<div class="hero"><span class="en" style="color:var(--rose-ink)">تمت مشاركته معك</span><div style="font-weight:600;font-size:18px;margin-top:8px">${pc.in_period ? 'في فترة الدورة الآن' : `الموعد المتوقع ${countdown(pc.days_to_next)}`}</div><div class="small" style="color:var(--ink2)">${pc.next ? fmtGreg(pc.next, { weekday: true }) : ''}</div><p class="small" style="margin:12px 0 0">كن لطيفًا ومتفهمًا 🤍</p></div><p class="tiny muted" style="margin-top:12px">${DISCLAIMER}</p>`
-          : `<div class="card soft center">${icon('lock', 'lg')}<p>هذا القسم خاص بـ${esc(store.partner?.name || 'الطرف الآخر')}، ولا تُعرض تفاصيله لغيرها.</p></div>`}</div>`;
-      return;
-    }
+    if (!isOwner) return partnerView(el, full);
     if (!c.enabled) {
       el.innerHTML = `<div class="page">${pageHead({ en: 'خاص بروان', ar: 'الدورة الشهرية', back: '#/more' })}
         <div class="hero"><span class="en" style="color:var(--rose-ink);font-size:14px">خاص بك</span><h2 style="margin:8px 0 6px;font-size:19px">مساحة خاصة لمتابعة دورتك</h2>
@@ -161,6 +157,7 @@ export default {
       <div class="legend"><span><i style="background:#C77A8A"></i>الدورة</span><span><i style="background:color-mix(in srgb,#C77A8A 22%,transparent)"></i>متوقعة</span>${c.fertility ? '<span><i style="background:var(--sage-soft)"></i>خصوبة تقديرية</span>' : ''}</div></div>
       <div class="section-title"><h2>السجل</h2><span class="en">السابقة</span></div>
       <div class="card">${sorted.length ? sorted.map((e, i) => { const next = sorted[i - 1]; const L2 = next ? diffDays(e.start_date, next.start_date) : null; return `<div class="item" data-open="${e.id}" style="cursor:pointer"><span class="ic-box rose">${icon('drop')}</span><div class="grow"><div class="title">${fmtGreg(e.start_date)}${e.end_date ? ' – ' + fmtGreg(e.end_date, { year: false }) : ''}</div><div class="sub">${e.end_date ? daysWord(diffDays(e.start_date, e.end_date) + 1) : 'جارية'}${L2 ? ` · طول الدورة ${L2} يومًا` : ''}${e.pain ? ` · الألم ${e.pain}/10` : ''}${(e.symptoms || []).length ? ' · ' + e.symptoms.map((x) => L.symptoms[x]).filter(Boolean).join('، ') : ''}</div></div></div>`; }).join('') : '<div class="small muted">لا توجد سجلات بعد</div>'}</div>
+      ${store.partner && (c.share || 'none') === 'none' ? `<div class="notice rose" style="margin-top:14px" data-settings>${icon('users', 'sm')} يمكنك مشاركة الدورة مع ${esc(store.partner.name)} ليطّلع عليها من قسم مستقل (بدون تعديل) — من «الخصوصية» ${icon('shield', 'sm')}</div>` : ''}
       <p class="tiny muted" style="margin-top:14px">${icon('shield', 'sm')} ${DISCLAIMER} هذه البيانات خاصة بك ولا تُشارك مع أي جهة.</p>
     </div>`;
     el.onclick = async (e) => {
@@ -176,3 +173,41 @@ export default {
     };
   },
 };
+
+// ================= the partner's read-only view (e.g. Eyad following Rawan's cycle) =================
+let pv = null;
+async function partnerView(el, full) {
+  const name = store.partner?.name || 'روان';
+  if (!pv || full) { if (!pv) el.innerHTML = '<div class="page"><div class="splash" style="min-height:40vh"><div class="logo" style="font-size:30px">E<i>&amp;</i>R</div></div></div>'; try { pv = await get('/api/cycle/partner'); } catch (e) { el.innerHTML = `<div class="page"><div class="empty">${esc(e.message)}</div></div>`; return; } }
+  else get('/api/cycle/partner').then((r) => { if (JSON.stringify(r) !== JSON.stringify(pv)) { pv = r; partnerView(el, false); } }).catch(() => {});
+  const t = today(), s = pv.summary;
+  const head = pageHead({ en: 'للاطلاع فقط', ar: `دورة ${name}`, back: '#/more' });
+  if (pv.share === 'none') { el.innerHTML = `<div class="page">${head}<div class="card soft center">${icon('lock', 'lg')}<p style="margin-bottom:4px">هذا القسم خاص بـ${esc(name)}.</p><p class="small muted" style="margin-top:0">يظهر هنا عندما ${esc(name)} تفعّل المشاركة من «الخصوصية» داخل قسم الدورة.</p></div></div>`; return; }
+  const status = s.next ? (s.in_period ? `في فترة الدورة الآن — اليوم ${s.day_of_cycle}` : s.days_to_next === 0 ? 'الدورة متوقعة اليوم' : `الموعد المتوقع ${countdown(s.days_to_next)}`) : 'لا توجد بيانات كافية بعد';
+  let extra = '';
+  if (pv.share === 'full') {
+    const items = pv.items || [];
+    const st2 = cycleStats(items, t);
+    if (!st.pmonth) st.pmonth = monthKey(t);
+    const [y, mo] = st.pmonth.split('-').map(Number), first = iso(y, mo, 1), len = daysInMonth(y, mo);
+    const pd = new Set(), pr = new Set(), fe = new Set();
+    for (const e of items) { const end = e.end_date || (diffDays(e.start_date, t) < 15 && !e.end_date ? t : addDays(e.start_date, st2.avgPeriod - 1)); for (let d = e.start_date; d <= end; d = addDays(d, 1)) pd.add(d); }
+    if (st2.next) for (let k = 0; k < 3; k++) { const ns = addDays(st2.next, k * st2.avgCycle); for (let i = 0; i < st2.avgPeriod; i++) pr.add(addDays(ns, i)); if (pv.fertility) { const ov = addDays(ns, -14); for (let i = -5; i <= 1; i++) fe.add(addDays(ov, i)); } }
+    const ws = store.me.settings.week_start ?? 6, off = (weekday(first) - ws + 7) % 7;
+    let grid = ''; for (let i = 0; i < 7; i++) grid += `<div class="wd">${WEEKDAYS_SHORT[(ws + i) % 7]}</div>`;
+    for (let i = 0; i < off; i++) grid += '<div></div>';
+    for (let d = 1; d <= len; d++) { const ds = iso(y, mo, d); grid += `<div class="cal-day ${pd.has(ds) ? 'period' : pr.has(ds) && ds >= t ? 'pred' : fe.has(ds) && ds >= t ? 'fert' : ''} ${ds === t ? 'today' : ''}"><span class="g num">${d}</span></div>`; }
+    extra = `<div class="stats3" style="margin-top:12px"><div class="stat"><b class="num">${s.avg_cycle}</b><span>متوسط طول الدورة</span></div><div class="stat"><b class="num">${s.avg_period}</b><span>متوسط المدة</span></div><div class="stat"><b class="num">${s.count}</b><span>دورات مسجلة</span></div></div>
+      <div class="section-title"><h2>تقويم الدورة</h2></div>
+      <div class="card ccal" style="padding:12px"><div class="cal-head"><button class="icon-btn plain" data-pm="-1">${icon('chevR')}</button><div class="t"><b>${GREG_MONTHS[mo - 1]} ${y}</b></div><button class="icon-btn plain" data-pm="1">${icon('chevL')}</button></div><div class="cal-grid">${grid}</div>
+      <div class="legend"><span><i style="background:#C77A8A"></i>الدورة</span><span><i style="background:color-mix(in srgb,#C77A8A 22%,transparent)"></i>متوقعة</span>${pv.fertility ? '<span><i style="background:var(--sage-soft)"></i>خصوبة تقديرية</span>' : ''}</div></div>
+      <div class="section-title"><h2>الدورات السابقة</h2></div>
+      <div class="card">${items.length ? items.map((e, i) => { const nx = items[i - 1]; const L2 = nx ? diffDays(e.start_date, nx.start_date) : null; return `<div class="item"><span class="ic-box rose">${icon('drop')}</span><div class="grow"><div class="title">${fmtGreg(e.start_date)}${e.end_date ? ' – ' + fmtGreg(e.end_date, { year: false }) : ''}</div><div class="sub">${e.end_date ? daysWord(diffDays(e.start_date, e.end_date) + 1) : 'جارية'}${L2 ? ` · طول الدورة ${L2} يومًا` : ''}${e.pain ? ` · الألم ${e.pain}/10` : ''}${(e.symptoms || []).length ? ' · ' + e.symptoms.map((x) => L.symptoms[x]).filter(Boolean).join('، ') : ''}${e.mood ? ' · ' + esc(e.mood) : ''}</div>${e.notes ? `<div class="sub" style="white-space:pre-wrap">${esc(e.notes)}</div>` : ''}</div></div>`; }).join('') : '<div class="small muted">لا توجد سجلات بعد</div>'}</div>`;
+  }
+  el.innerHTML = `<div class="page">${head}
+    <div class="hero"><span class="en" style="color:var(--rose-ink);font-size:14px">${pv.share === 'full' ? 'تمت مشاركته معك' : 'الموعد المتوقع فقط'}</span>
+      <div style="font-weight:600;font-size:18px;margin-top:8px">${status}</div><div class="small" style="color:var(--ink2)">${s.next ? fmtGreg(s.next, { weekday: true }) + ' · ' + fmtHijri(s.next) : ''}</div><p class="small" style="margin:12px 0 0">كن لطيفًا ومتفهمًا 🤍</p></div>
+    ${extra}
+    <p class="tiny muted" style="margin-top:12px">${icon('eye', 'sm')} للاطلاع فقط — ${esc(name)} هي من تسجّل وتعدّل، وتتحدث البيانات هنا تلقائيًا. ${DISCLAIMER}</p></div>`;
+  el.onclick = (e) => { const b = e.target.closest('[data-pm]'); if (b) { st.pmonth = addMonths(st.pmonth, Number(b.dataset.pm)); partnerView(el, false); } };
+}

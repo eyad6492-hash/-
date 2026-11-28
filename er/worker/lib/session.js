@@ -5,7 +5,7 @@ import { randomToken, sha256hex } from './crypto.js';
 export const COOKIE = 'er_session';
 const SESSION_DAYS = 60;
 
-export const USER_DEFAULTS = { theme: 'auto', date_display: 'both', tz: 'Asia/Riyadh', remind_hour: 9, notify: { tasks: true, notes: true, dates: true, events: true, trips: true, plans: true, shopping: true, mood: true, wishes: true, requests: true, commitments: true, agreements: true, reminders: true, urgent: true, appointments: true, confessions: true, upsets: true, needs: true, outings: true, memories: true, anniversary: true, daily: true, cravings: true }, cycle: { enabled: false, pin_hash: null, share: 'none', show_home: false, fertility: false, hide: false }, week_start: 6, numerals: 'latn' };
+export const USER_DEFAULTS = { theme: 'auto', date_display: 'both', tz: 'Asia/Riyadh', remind_hour: 9, notify: { tasks: true, notes: true, dates: true, events: true, trips: true, plans: true, shopping: true, mood: true, wishes: true, requests: true, commitments: true, agreements: true, reminders: true, urgent: true, appointments: true, confessions: true, upsets: true, needs: true, outings: true, memories: true, anniversary: true, daily: true, cravings: true, quran: true }, cycle: { enabled: false, pin_hash: null, share: 'none', show_home: false, home_card: true, fertility: false, hide: false }, week_start: 6, numerals: 'latn' };
 
 export function parseSettings(s) {
   let o = {}; try { o = JSON.parse(s || '{}'); } catch { o = {}; }

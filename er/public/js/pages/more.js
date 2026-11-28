@@ -7,7 +7,8 @@ export default {
   render(el) {
     const me = store.me, p = store.partner, t = today();
     const cyc = me.settings.cycle;
-    const showCycle = !cyc.hide && (me.letter === 'R' || cyc.enabled || !!store.partner_cycle);
+    const cycleOwner = me.letter === 'R' || cyc.enabled;
+    const showCycle = cycleOwner ? !cyc.hide : !!p; // the partner always finds it here (read-only, at the level the owner shares)
     const n = (col, f) => all(col).filter(f).length;
     const mine = (r, k) => r[k] === me.id || r[k] === 'both' || !r[k];
     const GROUPS = [
@@ -19,6 +20,7 @@ export default {
         ['mood', 'smile', 'مزاجنا', 0],
       ]],
       ['خططنا', [
+        ['quran', 'sparkle', 'مواعيد تسميع القرآن 🤍', n('quran', (r) => r.status === 'scheduled' && r.date >= t)],
         ['s/appointments', 'clock', 'مواعيدنا', n('appointments', (r) => r.date >= t && r.status === 'upcoming')],
         ['dates', 'gift', 'تواريخنا المهمة', 0], ['trips', 'plane', 'رحلاتنا', 0], ['honeymoon', 'palm', 'شهر العسل', 0],
         ['places', 'utensils', 'أماكننا', 0], ['bucket', 'sparkle', 'قائمة الأمنيات', 0],

@@ -204,6 +204,13 @@ export const COLLECTIONS = {
     label: 'تذكير', group: 'reminders',
     required: ['title', 'target', 'date'],
     fields: { title: 'str', details: 'text', target: 'user', date: 'date', time: 'time', priority: ['low', 'medium', 'high'], repeat: ['none', 'daily', 'weekly', 'monthly'], status: ['pending', 'done'], fired_at: 'str', link_col: 'str', link_id: 'str' },
+  },
+  quran: {
+    label: 'موعد تسميع', group: 'quran',
+    required: ['date', 'surah'],
+    writerLetter: 'R', // Rawan adds / edits / documents; Eyad can view only (server-enforced)
+    fields: { date: 'date', time: 'time', surah: 'int', from_ayah: 'int', to_ayah: 'int', part: 'str', teacher: 'str', notes: 'text', remind: ['', 'd1', 'h3', 'h1', 'm30'],
+      status: ['scheduled', 'done', 'partial', 'missed'], done_date: 'date', done_time: 'time', done_surah: 'int', done_from: 'int', done_to: 'int', rating: 'int', review_notes: 'text', done_notes: 'text' },
   }
 };
 

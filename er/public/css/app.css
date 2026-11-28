@@ -540,3 +540,31 @@ a.set-row, button.set-row { cursor: pointer; width: 100%; background: none; bord
 .bd-sign { text-align: left; color: #A9766E; font-weight: 600; opacity: 0; animation: bdIn .9s ease forwards; }
 @keyframes bdIn { from { opacity: 0; transform: translateY(8px); filter: blur(2px); } to { opacity: 1; transform: none; filter: none; } }
 @media (prefers-reduced-motion: reduce) { .bd-confetti { display: none; } }
+
+/* ======================= cycle home card (owner only) ======================= */
+.cy-card { display: flex; align-items: center; gap: 12px; }
+.cy-card.due { background: linear-gradient(135deg, var(--card), color-mix(in srgb, #C77A8A 14%, var(--card))); border-color: color-mix(in srgb, #C77A8A 30%, transparent); }
+.cy-card.due .ic-box { animation: cyPulse 2.4s ease-in-out infinite; }
+@keyframes cyPulse { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, #C77A8A 18%, transparent); } }
+
+/* ======================= مواعيد تسميع القرآن ======================= */
+.quran .page-head .kicker { font-size: 14px; color: var(--ok); }
+.q-next { display: block; width: 100%; text-align: inherit; border: 1px solid var(--line); border-radius: 26px; padding: 18px 16px; position: relative; overflow: hidden; color: inherit; font: inherit;
+  background: radial-gradient(110% 70% at 0% 0%, color-mix(in srgb, var(--sage) 22%, transparent), transparent 60%), linear-gradient(165deg, var(--card), var(--sage-soft)); box-shadow: var(--shadow); }
+.q-next::after { content: '۞'; position: absolute; inset: auto auto -26px -14px; font-size: 120px; line-height: 1; color: var(--ok); opacity: .07; pointer-events: none; }
+.q-empty { cursor: pointer; text-align: center; }
+.q-kicker { font-size: 12px; color: var(--ok); font-weight: 600; }
+.q-surah { font-size: 22px; font-weight: 600; margin-top: 4px; }
+.q-ayat { font-size: 13.5px; color: var(--ink2); margin-top: 2px; }
+.q-row { display: flex; align-items: center; gap: 14px; margin-top: 14px; }
+.q-count { min-width: 66px; text-align: center; background: color-mix(in srgb, var(--card) 75%, transparent); border-radius: 16px; padding: 8px 6px; }
+.q-count b { display: block; font-family: 'Plex', system-ui, sans-serif; font-size: 28px; font-weight: 600; line-height: 1.1; color: var(--ok); }
+.q-count span { font-size: 11px; color: var(--muted); }
+.q-done { margin-top: 14px; background: var(--ok); color: #fff; }
+.q-note { background: var(--sage-soft); color: var(--ok); }
+.quran .ic-box.q-ic { background: var(--sage-soft); color: var(--ok); font-weight: 600; }
+.quran .tl-month { color: var(--ok); }
+.quran .tabs button.on { color: var(--ok); }
+.q-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--sage); }
+.q-dot.scheduled { background: var(--rose); } .q-dot.done { background: var(--ok); } .q-dot.partial { background: var(--warn); } .q-dot.missed { background: var(--line2); }
+.legend .q-dot { width: 9px; height: 9px; margin-inline-end: 5px; vertical-align: 0; }

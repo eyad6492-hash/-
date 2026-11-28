@@ -27,6 +27,7 @@ export async function runReminders(env, ctx) {
   const sinceRow = await env.DB.prepare("SELECT value FROM space_settings WHERE key = 'since'").first();
   const since = sinceRow ? JSON.parse(sinceRow.value) : null;
   const today0 = nowLocal(parseSettings(all[0].settings).tz).slice(0, 10);
+  const quran = await q("SELECT * FROM quran WHERE status = 'scheduled' AND date >= date('now', '-1 day') AND remind IS NOT NULL AND remind != ''");
   const [appts, urgent, dailyTasks, reminders] = await Promise.all([
     q("SELECT * FROM appointments WHERE date >= date('now', '-1 day')"), q("SELECT * FROM urgent WHERE status != 'done'"),
     q("SELECT * FROM daily_tasks WHERE status != 'done' AND date >= date('now', '-14 day')"), q("SELECT * FROM reminders WHERE (status = 'pending' OR status IS NULL) AND fired_at IS NULL"),
@@ -86,6 +87,15 @@ export async function runReminders(env, ctx) {
       if (isDue(it.remind, it.remind_at, today)) await send(u, `shopping:${it.id}:${it.remind_at || today}`, { kind: 'shopping', group: 'shopping', title: `تذكير بالشراء: ${it.name}`, body: it.qty || '', link: '#/shopping' });
     }
 
+    // ---- مواعيد تسميع القرآن: optional reminder for Rawan (day before / hours / half an hour) ----
+    if (u.letter === 'R') for (const s of quran) {
+      const at = `${s.date}T${s.time || '09:00'}`;
+      const msg = { kind: 'quran', group: 'quran', title: 'تذكير بموعد التسميع 🤍', body: `${fmtGreg(s.date, { weekday: true })}${s.time ? ' — ' + fmtTime(s.time) : ''}`, link: '#/quran' };
+      if (s.remind === 'd1') { if (daily && diffDays(today, s.date) === 1) await send(u, `quran:${s.id}:${s.date}:d1`, msg); continue; }
+      const mins = { h3: 180, h1: 60, m30: 30 }[s.remind]; if (!mins) continue;
+      const fire = nowLocal('UTC', new Date(Date.parse(at + ':00Z') - mins * 60000));
+      if (local >= fire && local < at) await send(u, `quran:${s.id}:${at}:${s.remind}`, msg);
+    }
     // ---- أعياد ميلادنا: the partner's birthday countdown + the day itself; a letter waiting on my own birthday ----
     if (daily) {
       const partner = all.find((x) => x.id !== u.id);

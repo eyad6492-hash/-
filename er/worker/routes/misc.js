@@ -2,7 +2,9 @@
 import { COLLECTIONS, COL_NAMES } from '../schema.js';
 import { HttpError, bad, json, newId, notFound, nowISO, readJson, str } from '../lib/util.js';
 import { hashPassword, verifyPassword } from '../lib/crypto.js';
-import { parseSettings, users } from '../lib/session.js';
+import { parseSettings, partnerOf, users } from '../lib/session.js';
+import { cycleStats } from '../../public/js/cycle-math.js';
+import { todayIn } from '../../public/js/dates.js';
 import { vapidKeys } from '../lib/push.js';
 import { pushTo } from '../lib/notify.js';
 import { getRow, logChange, parseRow, requireCycleAccess, visible } from './data.js';
@@ -28,8 +30,8 @@ function mergeSettings(cur, patch) {
   if (['latn', 'arab'].includes(patch.numerals)) s.numerals = patch.numerals;
   if (patch.notify && typeof patch.notify === 'object') for (const k of Object.keys(s.notify)) if (k in patch.notify) s.notify[k] = !!patch.notify[k];
   if (patch.cycle && typeof patch.cycle === 'object') {
-    for (const k of ['enabled', 'show_home', 'fertility', 'hide']) if (k in patch.cycle) s.cycle[k] = !!patch.cycle[k];
-    if (['none', 'prediction'].includes(patch.cycle.share)) s.cycle.share = patch.cycle.share;
+    for (const k of ['enabled', 'show_home', 'home_card', 'fertility', 'hide']) if (k in patch.cycle) s.cycle[k] = !!patch.cycle[k];
+    if (['none', 'prediction', 'full'].includes(patch.cycle.share)) s.cycle.share = patch.cycle.share;
   }
   return s;
 }
@@ -94,6 +96,29 @@ export const miscRoutes = {
     }
     await logChange(ctx, 'space', 'space', 'update');
     return json({ ok: true });
+  },
+
+  // ---------- cycle: owner's home summary (dates only — works even when the section is PIN-locked) ----------
+  'GET /api/cycle/summary': async (ctx) => {
+    const s = parseSettings(ctx.user.settings);
+    if (!s.cycle.enabled) return json({ enabled: false });
+    const { results } = await ctx.env.DB.prepare('SELECT start_date, end_date FROM cycles WHERE created_by = ?').bind(ctx.user.id).all();
+    const st = cycleStats(results, todayIn(s.tz));
+    return json({ enabled: true, count: st.count, next: st.next, days_to_next: st.daysToNext, in_period: st.inPeriod, day_of_cycle: st.dayOfCycle });
+  },
+  // ---------- cycle: the partner's read-only view, exactly at the level the owner chose to share ----------
+  'GET /api/cycle/partner': async (ctx) => {
+    const p = await partnerOf(ctx.env, ctx.user.id);
+    if (!p) return json({ share: 'none' });
+    const s = parseSettings(p.settings);
+    if (!s.cycle.enabled || !['prediction', 'full'].includes(s.cycle.share)) return json({ share: 'none', name: p.name });
+    const cols = s.cycle.share === 'full' ? '*' : 'start_date, end_date';
+    const { results } = await ctx.env.DB.prepare(`SELECT ${cols} FROM cycles WHERE created_by = ? ORDER BY start_date DESC`).bind(p.id).all();
+    const st = cycleStats(results, todayIn(s.tz));
+    const summary = { next: st.next, days_to_next: st.daysToNext, in_period: st.inPeriod, day_of_cycle: st.dayOfCycle, avg_cycle: st.avgCycle, avg_period: st.avgPeriod, count: st.count };
+    if (s.cycle.share !== 'full') return json({ share: 'prediction', name: p.name, summary });
+    const items = results.map((r) => ({ id: r.id, start_date: r.start_date, end_date: r.end_date, flow: r.flow, symptoms: (() => { try { return JSON.parse(r.symptoms || '[]'); } catch { return []; } })(), mood: r.mood, pain: r.pain, notes: r.notes, updated_at: r.updated_at }));
+    return json({ share: 'full', name: p.name, summary, items, fertility: !!s.cycle.fertility });
   },
 
   // ---------- cycle tracker lock (server-enforced) ----------

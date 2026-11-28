@@ -12,7 +12,7 @@ import { sinceCard } from './since.js';
 import { homeExtra } from './home-extra.js';
 import { birthdayCard, bindCard } from './birthday.js';
 
-let cycleCache = null;
+let cycleCache = null, cycleStale = true;
 
 export default {
   async render(el) {
@@ -82,16 +82,22 @@ export default {
     const total = exps.reduce((s, x) => s + (x.amount || 0), 0);
     const budget = all('budgets').find((b) => b.month === mk)?.amount;
 
-    // ---- cycle (only for its owner, only if enabled & shown on home) ----
+    // ---- cycle: a quiet card at the bottom of the owner's (Rawan's) home only — never on the partner's home ----
     let cycleCard = '';
     const cs = me.settings.cycle;
-    if (cs.enabled && cs.show_home && !cs.has_pin) {
-      if (!cycleCache) get('/api/c/cycles').then((r) => { cycleCache = r.items; this.render(el); }).catch(() => { cycleCache = []; });
-      const st = cycleCache ? cycleStats(cycleCache, t) : null;
-      if (st?.next) cycleCard = `<a class="card tap" href="#/cycle" style="display:block"><div class="card-head"><span class="en">الدورة</span>${icon('drop', 'sm')}</div><div class="small">${st.inPeriod ? `اليوم ${st.dayOfCycle} من الدورة` : `الدورة المتوقعة ${countdown(st.daysToNext)}`}</div></a>`;
-    } else if (store.partner_cycle?.next && !cs.enabled) {
-      const pc = store.partner_cycle;
-      cycleCard = `<div class="card soft"><div class="card-head"><span class="en">${esc(partner?.name || '')}—الدورة</span>${icon('drop', 'sm')}</div><div class="small">${pc.in_period ? 'في فترة الدورة الآن — كن لطيفًا 🤍' : `الموعد المتوقع ${countdown(pc.days_to_next)}`}</div></div>`;
+    const cycleOwner = me.letter === 'R' || cs.enabled;
+    if (cycleOwner && cs.home_card !== false) {
+      if (!cs.enabled) cycleCard = `<a class="card tap cy-card" href="#/cycle"><span class="ic-box rose">${icon('drop')}</span><div class="grow"><div style="font-weight:500;font-size:14px">الدورة الشهرية</div><div class="small muted">فعّليها لتعرفي موعدك القادم تقريبًا</div></div>${icon('chevL', 'sm')}</a>`;
+      else {
+        if (cycleStale) { cycleStale = false; get('/api/cycle/summary').then((r) => { const changed = JSON.stringify(r) !== JSON.stringify(cycleCache); cycleCache = r; if (changed) window.dispatchEvent(new Event('er:rerender')); }).catch(() => { cycleCache = cycleCache || { enabled: true }; }); }
+        const sm = cycleCache;
+        if (sm) {
+          const todayDue = sm.next && sm.days_to_next === 0 && !sm.in_period;
+          const line = !sm.next ? 'سجّلي أول دورة لتظهر التوقعات' : sm.in_period ? `اليوم ${sm.day_of_cycle} من الدورة — اهتمي بنفسك 🤍` : todayDue ? 'متوقعة اليوم — كوني مستعدة 🤍' : `باقي ${sm.days_to_next} ${sm.days_to_next === 1 ? 'يوم' : sm.days_to_next <= 10 ? 'أيام' : 'يومًا'}`;
+          cycleCard = `<a class="card tap cy-card ${todayDue || sm.in_period ? 'due' : ''}" href="#/cycle"><span class="ic-box rose">${icon('drop')}</span><div class="grow"><div style="font-weight:500;font-size:14px">الدورة القادمة${sm.next ? ` · ${fmtGreg(sm.next, { weekday: true, year: false })}` : ''}</div><div class="small ${todayDue || sm.in_period ? '' : 'muted'}">${line}</div></div>${sm.next && !todayDue && !sm.in_period ? `<div class="cd"><b class="num">${sm.days_to_next}</b><span>${sm.days_to_next === 1 ? 'يوم' : sm.days_to_next <= 10 ? 'أيام' : 'يومًا'}</span></div>` : icon('chevL', 'sm')}</a>`;
+        }
+        setTimeout(() => { cycleStale = true; }, 3000); // refresh quietly on a later render (picks up edits & the new day)
+      }
     }
 
     el.innerHTML = `<div class="page">

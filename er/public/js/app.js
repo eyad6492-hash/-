@@ -12,11 +12,11 @@ const ROUTES = [
   ['plans', 'plans'], ['plans/:month', 'plans'], ['more', 'more'], ['dates', 'dates'], ['mood', 'mood'],
   ['places', 'places'], ['bucket', 'bucket'], ['trips', 'trips'], ['trips/:id', 'trip'], ['honeymoon', 'honeymoon'],
   ['shopping', 'shopping'], ['expenses', 'expenses'], ['notes', 'notes'], ['cycle', 'cycle'], ['settings', 'settings'],
-  ['notifications', 'notifications'], ['since', 'since'], ['s/:key', 's'], ['outing/:id', 'outing'], ['anniv', 'anniv'], ['birthday', 'birthday'], ['birthday/:sub', 'birthday'],
+  ['notifications', 'notifications'], ['since', 'since'], ['s/:key', 's'], ['outing/:id', 'outing'], ['anniv', 'anniv'], ['birthday', 'birthday'], ['quran', 'quran'], ['birthday/:sub', 'birthday'],
 ];
 const AUTH_ROUTES = ['login', 'setup', 'join/:token', 'reset/:token', 'recover'];
 const NAV = [['', 'home', 'الرئيسية', 'الرئيسية'], ['calendar', 'calendar', 'التقويم', 'التقويم'], ['tasks', 'tasks', 'المهام', 'المهام'], ['plans', 'plans', 'الخطط', 'الخطط'], ['more', 'more', 'المزيد', 'المزيد']];
-const MORE_SECTIONS = new Set(['birthday', 's', 'outing', 'anniv', 'since', 'dates', 'mood', 'places', 'bucket', 'trips', 'trip', 'honeymoon', 'shopping', 'expenses', 'notes', 'cycle', 'settings', 'notifications', 'more']);
+const MORE_SECTIONS = new Set(['quran', 'birthday', 's', 'outing', 'anniv', 'since', 'dates', 'mood', 'places', 'bucket', 'trips', 'trip', 'honeymoon', 'shopping', 'expenses', 'notes', 'cycle', 'settings', 'notifications', 'more']);
 
 function match(hash, routes) {
   const path = hash.replace(/^#\/?/, '').split('?')[0].replace(/\/$/, '');
@@ -47,7 +47,7 @@ function shell() {
 function setNav(name) {
   const key = MORE_SECTIONS.has(name) ? 'more' : name === 'task' ? 'tasks' : name;
   document.querySelectorAll('[data-nav]').forEach((a) => a.classList.toggle('on', a.dataset.nav === key));
-  document.getElementById('fab')?.classList.toggle('hidden', ['settings', 'cycle', 'notifications', 'shopping', 'more', 'since', 's', 'outing', 'anniv', 'birthday'].includes(name));
+  document.getElementById('fab')?.classList.toggle('hidden', ['settings', 'cycle', 'notifications', 'shopping', 'more', 'since', 's', 'outing', 'anniv', 'birthday', 'quran'].includes(name));
 }
 
 async function render(full = true) {

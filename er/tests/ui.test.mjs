@@ -177,7 +177,34 @@ async function main() {
     await r.evaluate(() => fetch('/api/bday/config', { method: 'PATCH', headers: { 'content-type': 'application/json', 'x-requested-with': 'er' }, body: JSON.stringify({ birthdays: { R: { greg: '2004-02-27' } } }) }));
   });
 
-  const routes = ['birthday', 'birthday/admin', 's/wishes', 's/outings', 's/memories', 's/visited', 's/appointments', 's/daily_tasks', 's/cravings', 's/confessions', 's/upsets', 's/joys', 's/urgent', 's/requests', 's/commitments', 's/agreements', 's/needs', 's/reminders', 'anniv', 'since', '', 'calendar', 'tasks', 'plans', 'more', 'dates', 'mood', 'places', 'bucket', 'trips', 'honeymoon', 'shopping', 'expenses', 'notes', 'settings', 'notifications'];
+  await step('الدورة: بطاقة في أسفل رئيسية روان فقط، وإياد يطّلع من قسم مستقل بحسب مشاركتها', async () => {
+    await r.goto(BASE + '/#/'); await r.waitForSelector('.cy-card', { timeout: 12000 });
+    const pos = await r.evaluate(() => { const cards = [...document.querySelectorAll('#page .card, #page .hero, #page .bd-card, #page .mood-pair')]; return cards.indexOf(document.querySelector('.cy-card')) === cards.length - 1; });
+    if (!pos) throw new Error('cycle card is not the last block on the home page');
+    await r.evaluate(() => window.scrollTo(0, document.body.scrollHeight)); await shot(r, '40-cycle-home-rawan');
+    await e.goto(BASE + '/#/'); await e.waitForSelector('.greet'); await e.waitForTimeout(800);
+    if (await e.$('.cy-card')) throw new Error('cycle card must not appear on Eyad home');
+    await e.goto(BASE + '/#/more'); await e.click('a[href="#/cycle"]'); await e.waitForSelector('text=هذا القسم خاص');
+    await r.goto(BASE + '/#/cycle'); await r.click('.page-head [data-settings]'); await r.click('.sheet [data-share="full"]'); await r.waitForTimeout(500); await r.keyboard.press('Escape');
+    await r.click('[data-new]'); await r.fill('.sheet [data-k="start_date"]', '2026-10-01'); await r.fill('.sheet [data-k="end_date"]', '2026-10-05'); await r.click('.sheet [data-seg="symptoms"][data-v="headache"]'); await save(r);
+    await e.goto(BASE + '/#/cycle'); await e.waitForSelector('text=الدورات السابقة', { timeout: 12000 }); await e.waitForSelector('text=صداع'); await shot(e, '41-cycle-eyad-readonly');
+    if (await e.$('[data-new], [data-start]')) throw new Error('Eyad must not have edit buttons');
+  });
+  await step('مواعيد تسميع القرآن: روان تضيف وتوثّق، إياد يتابع فقط', async () => {
+    await r.goto(BASE + '/#/quran'); await r.click('.q-empty'); await r.waitForSelector('.sheet [data-k="surah"]');
+    await r.selectOption('.sheet [data-k="surah"]', '67'); await r.fill('.sheet [data-k="from_ayah"]', '1'); await r.fill('.sheet [data-k="to_ayah"]', '15'); await r.fill('.sheet [data-k="time"]', '20:00');
+    await r.fill('.sheet [data-k="date"]', new Date(Date.now() + 3 * 3600000 + 2 * 86400000).toISOString().slice(0, 10)); await fill(r, 'teacher', 'أ. نورة'); await save(r);
+    await r.waitForSelector('.q-next .q-surah:has-text("سورة الملك")'); await shot(r, '42-quran-rawan');
+    await e.goto(BASE + '/#/quran'); await e.waitForSelector('text=سورة الملك', { timeout: 12000 }); await e.waitForSelector('.q-note');
+    if (await e.$('.page-head [data-new], [data-doc-next], [data-direct]')) throw new Error('Eyad must be view-only');
+    await shot(e, '43-quran-eyad');
+    await r.click('[data-doc-next]'); await r.waitForSelector('.sheet [data-k="done_surah"]'); await r.click('.sheet [data-seg="status"][data-v="partial"]'); await r.fill('.sheet [data-k="done_to"]', '10'); await r.click('.sheet [data-star="4"]'); await fill(r, 'review_notes', 'مراجعة الآيات 11-15'); await save(r);
+    await r.click('[data-tab=log]'); await r.waitForSelector('text=جزئي'); await r.fill('#qq', 'الملك'); await r.waitForTimeout(500); await r.waitForSelector('text=سورة الملك'); await shot(r, '44-quran-log');
+    await r.click('[data-tab=cal]'); await r.waitForSelector('.q-dot'); await shot(r, '45-quran-cal');
+    await e.goto(BASE + '/#/quran'); await e.click('[data-tab=log]'); await e.waitForSelector('text=جزئي', { timeout: 12000 });
+  });
+
+  const routes = ['quran', 'cycle', 'birthday', 'birthday/admin', 's/wishes', 's/outings', 's/memories', 's/visited', 's/appointments', 's/daily_tasks', 's/cravings', 's/confessions', 's/upsets', 's/joys', 's/urgent', 's/requests', 's/commitments', 's/agreements', 's/needs', 's/reminders', 'anniv', 'since', '', 'calendar', 'tasks', 'plans', 'more', 'dates', 'mood', 'places', 'bucket', 'trips', 'honeymoon', 'shopping', 'expenses', 'notes', 'settings', 'notifications'];
   await step('كل الصفحات تعمل (إياد)', async () => {
     const english = [];
     for (const [i, rt] of routes.entries()) {
