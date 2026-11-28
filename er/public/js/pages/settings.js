@@ -8,7 +8,12 @@ import { applyTheme, logoutLocal } from '../app.js';
 import { tzName } from '../labels.js';
 
 let push = null;
-const NOTIFY = [['tasks', 'المهام (تكليف، إنجاز، تعليقات، تذكير)'], ['dates', 'المناسبات وأعياد الميلاد'], ['events', 'المواعيد'], ['trips', 'الرحلات'], ['plans', 'الخطط الشهرية'], ['shopping', 'المقاضي'], ['notes', 'الرسائل الصغيرة'], ['mood', 'مزاج الطرف الآخر']];
+const NOTIFY = [
+  ['يومنا', [['daily', 'المهام اليومية'], ['reminders', 'ذكرني بشيء'], ['urgent', 'الأشياء العاجلة'], ['outings', 'خطط الخروج'], ['cravings', 'وش نفسك فيه اليوم؟'], ['mood', 'مزاج الطرف الآخر']]],
+  ['خططنا', [['appointments', 'مواعيدنا (المستشفى والمراجعات)'], ['events', 'مواعيد التقويم'], ['dates', 'المناسبات وأعياد الميلاد'], ['anniversary', 'الذكرى الشهرية والسنوية'], ['trips', 'الرحلات'], ['plans', 'الخطط الشهرية'], ['tasks', 'المهام (تكليف، إنجاز، تعليقات)']]],
+  ['أمنياتنا', [['wishes', 'الأمنيات واختيارها وتحقيقها'], ['requests', 'الطلبات والردود'], ['needs', 'الأغراض الناقصة'], ['shopping', 'المقاضي']]],
+  ['ذكرياتنا وتواصلنا', [['memories', 'توثيق ذكرى جديدة'], ['notes', 'الرسائل الصغيرة'], ['confessions', 'الاعترافات'], ['upsets', 'المواقف التي تحتاج نقاشًا'], ['commitments', 'التعهدات وطلبات الموافقة'], ['agreements', 'الاتفاقيات وطلبات الموافقة']]],
+];
 const TZS = ['Asia/Riyadh', 'Asia/Dubai', 'Asia/Kuwait', 'Asia/Qatar', 'Asia/Bahrain', 'Asia/Amman', 'Africa/Cairo', 'Europe/Istanbul', 'Europe/London', 'Europe/Paris', 'America/New_York'];
 
 async function saveSettings(s) {
@@ -49,7 +54,7 @@ export default {
       <div class="section-title"><h2>الإشعارات</h2><span class="en">التنبيهات</span></div>
       <div class="card">${row('bell', 'إشعارات الجوال', esc(push?.label || '…'), push?.supported ? (push.on ? `<div class="row" style="gap:6px"><button class="btn sm soft" data-act="pushtest">تجربة</button><button class="btn sm ghost" data-act="pushoff">إيقاف</button></div>` : '<button class="btn sm rose" data-act="pushon">تفعيل</button>') : '')}
         <div class="divider"></div><div class="small muted" style="margin-bottom:6px">أرسل لي إشعارًا عن:</div>
-        ${NOTIFY.map(([k, l]) => `<div class="set-row" style="padding:9px 0"><span class="small">${l}</span><label class="toggle"><input type="checkbox" data-notify="${k}" ${s.notify[k] !== false ? 'checked' : ''}><i></i></label></div>`).join('')}
+        ${NOTIFY.map(([g, items]) => `<div class="tiny" style="color:var(--rose-deep);font-weight:600;margin-top:10px">${g}</div>` + items.map(([k, l]) => `<div class="set-row" style="padding:8px 0"><span class="small">${l}</span><label class="toggle"><input type="checkbox" data-notify="${k}" ${s.notify[k] !== false ? 'checked' : ''}><i></i></label></div>`).join('')).join('')}
         <div class="tiny muted">التذكير قبل المناسبات/المواعيد يُحدَّد لكل عنصر: يوم قبل، 3 أيام، أسبوع، أو وقت مخصص.</div></div>
 
       <div class="section-title"><h2>الخصوصية</h2><span class="en">خصوصيتنا</span></div>

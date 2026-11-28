@@ -16,7 +16,7 @@ function shiftMonth(n) { let { y, m } = st.cur; m += n; if (m > 12) { m = 1; y++
 
 const itemHtml = (it) => `<div class="ev ${it.kind}" data-open="${it.col}:${it.id}">
   <span class="bar"></span><div class="time num">${it.time ? fmtTime(it.time) : it.col === 'dates' ? '✦' : it.col === 'trips' ? '✈︎' : 'طوال اليوم'}</div>
-  <div class="grow"><div class="title ${it.done ? 'done-text' : ''}">${esc(it.title)}</div><div class="sub small muted">${esc({ events: it.row.type === 'appointment' ? 'موعد' : 'حدث', dates: 'مناسبة', tasks: 'مهمة', plans: 'خطة', trips: 'رحلة', bucket: 'من قائمة الأمنيات' }[it.col])}${it.sub ? ' · ' + esc(it.sub) : ''}${it.years > 0 ? ` · ${it.years} سنة` : ''}</div></div>
+  <div class="grow"><div class="title ${it.done ? 'done-text' : ''}">${esc(it.title)}</div><div class="sub small muted">${esc({ events: it.row.type === 'appointment' ? 'موعد' : 'حدث', dates: 'مناسبة', tasks: 'مهمة', plans: 'خطة', trips: 'رحلة', bucket: 'من قائمة الأمنيات', appointments: 'موعد', outings: 'خطة يوم', daily_tasks: 'مهمة يومية', reminders: 'تذكير', urgent: 'عاجل', wishes: 'أمنية', requests: 'طلب', anniv: 'ذكرى' }[it.col] || '')}${it.sub ? ' · ' + esc(it.sub) : ''}${it.years > 0 ? ` · ${it.years} سنة` : ''}</div></div>
   ${it.assignee ? avatar(it.assignee, 'sm') : ''}</div>`;
 
 export default {
@@ -106,7 +106,11 @@ export default {
         return;
       }
       if ((b = q('[data-open]'))) {
-        const [col, id] = b.dataset.open.split(':'); const row = byId(col, id); if (!row) return;
+        const [col, id] = b.dataset.open.split(':');
+        if (col === 'anniv' || id === 'since') { location.hash = '#/anniv'; return; }
+        if (col === 'outings') { location.hash = `#/outing/${id}`; return; }
+        if (['appointments', 'daily_tasks', 'reminders', 'urgent', 'wishes', 'requests'].includes(col)) { (await import('./s.js')).openDetail(col, id); return; }
+        const row = byId(col, id); if (!row) return;
         ({ events: () => editEvent(row), dates: () => editDate(row), plans: () => editPlan(row), bucket: () => editBucket(row), tasks: () => { location.hash = `#/tasks/${id}`; }, trips: () => { location.hash = `#/trips/${id}`; } })[col]?.();
       }
     };

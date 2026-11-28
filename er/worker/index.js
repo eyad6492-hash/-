@@ -4,13 +4,14 @@ import { loadSession, requireUser } from './lib/session.js';
 import { authRoutes } from './routes/auth.js';
 import { dataRoutes } from './routes/data.js';
 import { miscRoutes } from './routes/misc.js';
+import { actionRoutes } from './routes/actions.js';
 import { runReminders } from './cron.js';
 import { serveStatic } from './static.js';
 
 const PUBLIC = new Set(['GET /api/auth/status', 'POST /api/auth/setup', 'POST /api/auth/login', 'POST /api/auth/logout', 'GET /api/auth/invite/:token', 'POST /api/auth/join', 'POST /api/auth/recover', 'POST /api/auth/forgot', 'POST /api/auth/reset']);
 
 const table = [];
-for (const group of [authRoutes, dataRoutes, miscRoutes]) {
+for (const group of [authRoutes, dataRoutes, miscRoutes, actionRoutes]) {
   for (const [key, handler] of Object.entries(group)) {
     const [method, path] = key.split(' ');
     const names = [];

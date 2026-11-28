@@ -28,11 +28,13 @@ function coerce(type, v, userIds, label) {
   }
 }
 
-function cleanInput(col, body, userIds, partial) {
+function cleanInput(col, body, userIds, partial, user = null) {
   const def = COLLECTIONS[col];
   const out = {};
   for (const [k, t] of Object.entries(def.fields)) {
     if (!(k in body)) continue;
+    if (def.protected?.includes(k)) continue; // only server actions may set these (approvals, picks, history)
+    if (def.letterFields?.[k] && user && def.letterFields[k] !== user.letter) continue; // e.g. only Rawan writes comment_r
     out[k] = coerce(t, body[k], userIds, k);
   }
   if (!partial) for (const k of def.required) if (out[k] === undefined || out[k] === null) throw bad(`حقل «${k}» مطلوب`);
@@ -48,6 +50,10 @@ const parseRow = (col, row) => {
 /** Strip what the viewer must not see (partner's private fields). */
 export function visible(col, row, viewerId) {
   const def = COLLECTIONS[col];
+  // a wish picked "as a surprise" looks untouched to its owner until it is fulfilled
+  if (col === 'wishes' && row.surprise && row.picked_by && row.picked_by !== viewerId && row.created_by === viewerId && row.status !== 'done') {
+    return { ...row, status: 'open', picked_by: null, picked_at: null, pick_date: null, pick_notes: null, surprise: 0, history: null };
+  }
   if (def.privateFields && row.created_by !== viewerId) { const r = { ...row }; for (const f of def.privateFields) delete r[f]; return r; }
   return row;
 }
@@ -77,6 +83,24 @@ const titleOf = (r) => r?.title || r?.name || r?.body?.slice(0, 40) || '';
 const SECTION_LINK = { dates: '#/dates', events: '#/calendar', tasks: '#/tasks', task_comments: '#/tasks', plans: '#/plans', moods: '#/mood', places: '#/places', bucket: '#/bucket', trips: '#/trips', trip_items: '#/trips', honeymoon: '#/honeymoon', honey_items: '#/honeymoon', shopping: '#/shopping', expenses: '#/expenses', budgets: '#/expenses', notes: '#/notes' };
 
 // --------- notification hooks (who gets told about what) ----------
+// For new rows of the v3 sections: returns { title, body, link } or null (no notification).
+const NEW_HOOKS = {
+  wishes: (r, p, me, v) => ({ title: `${me} ${v('أضاف')} أمنية جديدة`, body: r.title, link: '#/s/wishes' }),
+  outings: (r, p, me, v) => ({ title: `${me} ${v('أضاف')} خطة خروج`, body: `${r.title} — ${r.date}`, link: `#/outing/${r.id}` }),
+  memories: (r, p, me, v) => ({ title: `${me} ${v('وثّق')} ذكرى جديدة`, body: r.title, link: '#/s/memories' }),
+  appointments: (r, p, me, v, fp) => (fp(r.person) ? { title: `${me} ${v('أضاف')} موعدًا${r.person === p.id ? ' لك' : ' مشتركًا'}`, body: `${r.title} — ${r.date}${r.time ? ' ' + r.time : ''}`, link: '#/s/appointments' } : null),
+  daily_tasks: (r, p, me, v, fp) => (fp(r.assignee) ? { title: `مهمة يومية جديدة من ${me}`, body: r.title, link: '#/s/daily_tasks' } : null),
+  cravings: (r, p, me, v) => ({ title: `${me} ${v('') ? 'نفسها' : 'نفسه'} في…`, body: r.text, link: '#/s/cravings' }),
+  confessions: (r, p, me, v) => ({ title: `${me} ${v('كتب')} اعترافًا جديدًا`, body: r.title || 'افتحه بقلب مفتوح 🤍', link: '#/s/confessions' }),
+  upsets: (r, p, me, v) => ({ title: `${me} ${v('شارك')} موقفًا ${v('') ? 'ضايقها' : 'ضايقه'} — بهدوء ومحبة`, body: r.title, link: '#/s/upsets' }),
+  urgent: (r, p, me) => ({ title: `أمر عاجل من ${me}`, body: r.title, link: '#/s/urgent' }),
+  requests: (r, p, me, v) => (r.to_user === p.id ? { title: `${me} ${v('أرسل')} لك طلبًا`, body: r.title, link: '#/s/requests' } : null),
+  commitments: (r, p, me) => (r.promiser === p.id ? { title: `طلب موافقة على تعهد من ${me}`, body: r.title, link: '#/s/commitments' } : { title: `تعهد جديد من ${me}`, body: r.title, link: '#/s/commitments' }),
+  agreements: (r, p, me) => (r.draft ? null : { title: `اتفاقية جديدة تنتظر موافقتك`, body: `${r.title} — من ${me}`, link: '#/s/agreements' }),
+  needs: (r, p, me, v) => ({ title: `${me} ${v('أضاف')} غرضًا ناقصًا`, body: r.name, link: '#/s/needs' }),
+  reminders: (r, p, me) => (r.target === p.id ? { title: `${me} يذكّرك`, body: `${r.title} — ${r.date}${r.time ? ' ' + r.time : ''}`, link: '#/s/reminders' } : null),
+  joys: () => null,
+};
 async function afterWrite(ctx, col, before, after) {
   const partner = await partnerOf(ctx.env, ctx.user.id);
   if (!partner) return;
@@ -98,6 +122,11 @@ async function afterWrite(ctx, col, before, after) {
     await notify(ctx, partner, { kind: col, group: col, title: col === 'events' ? `${me} ${v('أضاف')} لك موعدًا` : `${me} ${v('أضاف')} لك خطة`, body: after.title, link: col === 'events' ? `#/calendar/${after.date}` : `#/plans/${after.month}`, actor: ctx.user.id });
   } else if (col === 'shopping' && created && after.buyer === partner.id) {
     await notify(ctx, partner, { kind: 'shopping', group: 'shopping', title: `${me} ${ctx.user.letter === 'R' ? 'تطلب' : 'يطلب'} منك شراء`, body: after.name + (after.qty ? ` (${after.qty})` : ''), link: '#/shopping', actor: ctx.user.id });
+  } else if (created && NEW_HOOKS[col]) {
+    const h = NEW_HOOKS[col](after, partner, me, v, forPartner);
+    if (h) await notify(ctx, partner, { kind: col, group: COLLECTIONS[col].group, actor: ctx.user.id, ...h });
+  } else if (!created && col === 'upsets' && before.status !== 'needs_talk' && after.status === 'needs_talk') {
+    await notify(ctx, partner, { kind: 'upsets', group: 'upsets', title: 'موقف يحتاج إلى نقاش هادئ', body: after.title, link: '#/s/upsets', actor: ctx.user.id });
   } else if (col === 'moods' && created) {
     await notify(ctx, partner, { kind: 'mood', group: 'mood', title: `${me} ${v('سجّل')} ${ctx.user.letter === 'R' ? 'مزاجها' : 'مزاجه'} اليوم`, body: after.message || '', link: '#/mood', actor: ctx.user.id });
   }
@@ -183,7 +212,7 @@ export const dataRoutes = {
     if (col === 'cycles') await requireCycleAccess(ctx);
     const body = await readJson(ctx.req);
     const ids = (await users(ctx.env)).map((u) => u.id);
-    const row = cleanInput(col, body, ids, false);
+    const row = cleanInput(col, body, ids, false, ctx.user);
     if (def.parent) { const p = await ctx.env.DB.prepare(`SELECT id FROM ${def.parent.col} WHERE id = ?`).bind(row[def.parent.key]).first(); if (!p) throw bad('العنصر الأصلي غير موجود'); }
     // "one per key" collections (mood per person per day, budget per month) → upsert
     if (def.unique) {
@@ -210,9 +239,14 @@ export const dataRoutes = {
     if (def.ownerWrite && before.created_by !== ctx.user.id) throw forbidden('هذا العنصر خاص بالطرف الآخر');
     const body = ctx.body || await readJson(ctx.req);
     const ids = (await users(ctx.env)).map((u) => u.id);
-    const patch = cleanInput(col, body, ids, true);
+    const patch = cleanInput(col, body, ids, true, ctx.user);
     if (def.parent) delete patch[def.parent.key];
     applyAuto(col, patch, before, ctx.user.id);
+    if (def.resetOnChange && def.resetOnChange.some((k) => k in patch && (patch[k] ?? null) !== (before[k] ?? null)) && (before.e_approved_at || before.r_approved_at)) {
+      // the approved version changed → both must approve the new version again
+      patch.e_approved_at = null; patch.r_approved_at = null; patch.version = (before.version || 1) + 1;
+      patch.history = JSON.stringify([...(before.history || []), { at: nowISO(), by: ctx.user.id, action: 'edited' }].slice(-50));
+    }
     Object.assign(patch, { updated_by: ctx.user.id, updated_at: nowISO() });
     const keys = Object.keys(patch).filter((k) => patch[k] !== undefined);
     await ctx.env.DB.prepare(`UPDATE ${col} SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE id = ?`).bind(...keys.map((k) => patch[k]), before.id).run();
@@ -246,7 +280,7 @@ export const dataRoutes = {
 
 /** Server-maintained fields (who completed / bought something and when). */
 function applyAuto(col, row, before, userId) {
-  for (const k of ['completed_at', 'completed_by', 'done_at', 'done_by']) delete row[k]; // never client-set
+  for (const k of ['completed_at', 'completed_by', 'done_at', 'done_by', 'bought_at', 'bought_by']) delete row[k]; // never client-set
   if (col === 'tasks' && row.status !== undefined) {
     if (row.status === 'completed' && before?.status !== 'completed') { row.completed_at = nowISO(); row.completed_by = userId; }
     if (row.status !== 'completed') { row.completed_at = null; row.completed_by = null; }
@@ -255,7 +289,25 @@ function applyAuto(col, row, before, userId) {
     if (row.done && !before?.done) { row.done_at = nowISO(); row.done_by = userId; }
     if (!row.done) { row.done_at = null; row.done_by = null; }
   }
-  for (const k of ['completed_at', 'completed_by', 'done_at', 'done_by']) if (row[k] === undefined) delete row[k];
+  if (col === 'daily_tasks' && row.status !== undefined) {
+    if (row.status === 'done' && before?.status !== 'done') { row.completed_at = nowISO(); row.completed_by = userId; }
+    if (row.status !== 'done') { row.completed_at = null; row.completed_by = null; }
+  }
+  if (col === 'needs' && row.bought !== undefined) {
+    if (row.bought && !before?.bought) { row.bought_at = nowISO(); row.bought_by = userId; }
+    if (!row.bought) { row.bought_at = null; row.bought_by = null; }
+  }
+  if (!before) { // creation defaults for workflow collections
+    const hist = (action) => JSON.stringify([{ at: nowISO(), by: userId, action }]);
+    if (col === 'commitments') { const self = row.promiser === userId; row.status = self ? 'accepted' : 'pending'; if (self) { row.accepted_by = userId; row.accepted_at = nowISO(); } row.history = hist(self ? 'accepted' : 'created'); }
+    if (col === 'requests') { row.status = 'pending'; row.history = hist('created'); }
+    if (col === 'agreements') { row.version = 1; row.closed = ''; row.history = hist(row.draft ? 'draft' : 'created'); }
+    if (col === 'wishes' && !row.status) row.status = 'open';
+    if (col === 'upsets' && !row.status) row.status = 'unread';
+    const DEF = { reminders: { status: 'pending', repeat: 'none' }, daily_tasks: { status: 'pending' }, urgent: { status: 'open' }, appointments: { status: 'upcoming' }, cravings: { status: 'open' }, outings: { status: 'planned' }, confessions: { status: 'open' } };
+    for (const [k, val] of Object.entries(DEF[col] || {})) if (!row[k]) row[k] = val;
+  }
+  for (const k of ['completed_at', 'completed_by', 'done_at', 'done_by', 'bought_at', 'bought_by']) if (row[k] === undefined) delete row[k];
 }
 
 export { getRow, parseRow, requireCycleAccess, spaceSettings };

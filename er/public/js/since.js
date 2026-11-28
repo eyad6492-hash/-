@@ -93,3 +93,19 @@ export function startSinceTicker() {
   setTimeout(() => { tick(); timer = setInterval(tick, 1000); }, 1000 - (Date.now() % 1000));
 }
 export { pad };
+
+/** Monthly anniversaries of the first day: day D of every month (D > month length → last day of that month). */
+export function monthlyAt(since, n) {
+  const a = parseAt(since?.at); if (!a) return null;
+  let y = a.y, m = a.mo + n; y += Math.floor((m - 1) / 12); m = ((m - 1) % 12) + 1;
+  return `${y}-${pad(m)}-${pad(Math.min(a.d, daysInMonth(y, m)))}`;
+}
+export function monthlies(since, todayStr) {
+  const a = parseAt(since?.at); if (!a) return { past: [], next: null };
+  const past = []; let next = null;
+  for (let n = 1; n < 1200; n++) {
+    const d = monthlyAt(since, n);
+    if (d <= todayStr) past.push({ n, date: d, yearly: n % 12 === 0 }); else { next = { n, date: d, yearly: n % 12 === 0 }; break; }
+  }
+  return { past: past.reverse(), next };
+}

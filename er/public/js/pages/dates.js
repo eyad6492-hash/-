@@ -4,6 +4,7 @@ import { esc, icon, empty, pageHead, img, byline, openSheet } from '../ui.js';
 import { diffDays, fmtGreg, fmtHijri, nextOccurrence, countdown } from '../dates.js';
 import { L } from '../labels.js';
 import { editDate } from '../editors.js';
+import { datesWithSince } from '../agenda.js';
 
 const st = { kind: 'all' };
 const milestone = (n) => (n === 0 ? 'اليوم' : n === 1 ? 'غدًا' : n <= 3 ? 'باقي 3 أيام أو أقل' : n <= 10 ? 'باقي 10 أيام أو أقل' : n <= 30 ? 'باقي أقل من شهر' : '');
@@ -11,11 +12,11 @@ const milestone = (n) => (n === 0 ? 'اليوم' : n === 1 ? 'غدًا' : n <= 3
 export default {
   render(el) {
     const t = today();
-    let items = all('dates').map((d) => { const o = nextOccurrence(d, t); return { d, o, n: o ? diffDays(t, o.date) : null }; });
+    let items = datesWithSince().map((d) => { const o = nextOccurrence(d, t); return { d, o, n: o ? diffDays(t, o.date) : null }; });
     if (st.kind !== 'all') items = items.filter((x) => x.d.kind === st.kind);
     const upcoming = items.filter((x) => x.n !== null && x.n >= 0).sort((a, b) => a.n - b.n);
     const past = items.filter((x) => x.n === null || x.n < 0).sort((a, b) => b.d.date.localeCompare(a.d.date));
-    const kinds = [...new Set(all('dates').map((d) => d.kind))];
+    const kinds = [...new Set(datesWithSince().map((d) => d.kind))];
     const row = ({ d, o, n }) => `<div class="item" data-open="${d.id}" style="cursor:pointer">
       ${d.image_id ? img(d.image_id, 'thumb') : `<span class="ic-box ${d.kind === 'birthday' ? 'rose' : 'brown'}">${icon(L.dateKindIcon[d.kind] || 'calendar')}</span>`}
       <div class="grow" style="min-width:0"><div class="title">${esc(d.title)}</div>
@@ -40,7 +41,7 @@ export default {
       const q = (s) => e.target.closest(s); let b;
       if (q('[data-new]')) return editDate();
       if ((b = q('[data-k]'))) { st.kind = b.dataset.k; return this.render(el); }
-      if ((b = q('[data-open]'))) view(all('dates').find((d) => d.id === b.dataset.open));
+      if ((b = q('[data-open]'))) { if (b.dataset.open === 'since') { location.hash = '#/anniv'; return; } view(all('dates').find((d) => d.id === b.dataset.open)); }
     };
   },
 };

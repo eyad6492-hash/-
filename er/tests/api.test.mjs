@@ -148,6 +148,75 @@ async function main() {
   });
   await test('إعداد الأرقام العربية يُحفظ', async () => { ok(await rawan('PATCH', '/api/me', { settings: { numerals: 'arab' } }), 'n'); assert.equal(ok(await rawan('GET', '/api/me'), 'me').settings.numerals, 'arab'); ok(await rawan('PATCH', '/api/me', { settings: { numerals: 'nope' } }), 'n2'); assert.equal(ok(await rawan('GET', '/api/me'), 'me').settings.numerals, 'arab'); });
 
+  console.log('\nالأقسام الجديدة (v3)');
+  await test('أمنيات: روان تضيف، إياد يختارها مفاجأة (تبقى مخفية عنها) ثم يحققها', async () => {
+    const w = ok(await rawan('POST', '/api/c/wishes', { title: 'عشاء على البحر', category: 'restaurant', importance: 'high' }), 'w').item;
+    assert.equal(w.status, 'open');
+    assert.equal((await rawan('POST', `/api/act/wishes/${w.id}`, { action: 'pick' })).status, 403);
+    assert.equal((await eyad('PATCH', `/api/c/wishes/${w.id}`, { picked_by: E.id })).status, 200); // protected field silently ignored
+    assert.equal(ok(await rawan('GET', '/api/bootstrap'), 'b').data.wishes.find((x) => x.id === w.id).picked_by, null);
+    const n0 = ok(await rawan('GET', '/api/notifications'), 'n').items.length;
+    const p = ok(await eyad('POST', `/api/act/wishes/${w.id}`, { action: 'pick', surprise: true, pick_date: '2030-02-14', pick_notes: 'حجز طاولة' }), 'pick').item;
+    assert.equal(p.picked_by, E.id); assert.equal(p.status, 'chosen');
+    const seen = ok(await rawan('GET', '/api/bootstrap'), 'b').data.wishes.find((x) => x.id === w.id);
+    assert.equal(seen.status, 'open'); assert.equal(seen.picked_by, null); assert.equal(seen.pick_notes, null);
+    assert.equal(ok(await rawan('GET', '/api/notifications'), 'n').items.length, n0, 'surprise must not notify');
+    ok(await eyad('POST', `/api/act/wishes/${w.id}`, { action: 'fulfill' }), 'done');
+    const after = ok(await rawan('GET', '/api/bootstrap'), 'b').data.wishes.find((x) => x.id === w.id);
+    assert.equal(after.status, 'done'); assert.equal(after.picked_by, E.id);
+    assert.ok(ok(await rawan('GET', '/api/notifications'), 'n').items.some((x) => x.kind === 'wish_done'));
+  });
+  await test('طلبات: الرد للمستلم فقط + سجل', async () => {
+    const q = ok(await eyad('POST', '/api/c/requests', { title: 'نطلع نتمشى', to_user: R.id, kind: 'outing', status: 'approved' }), 'q').item;
+    assert.equal(q.status, 'pending');
+    assert.equal((await eyad('POST', `/api/act/requests/${q.id}`, { action: 'respond', status: 'approved' })).status, 403);
+    const r = ok(await rawan('POST', `/api/act/requests/${q.id}`, { action: 'respond', status: 'approved', note: 'أكيد ❤️' }), 'r').item;
+    assert.equal(r.status, 'approved'); assert.ok(r.responded_at); assert.equal(r.history.length, 2);
+    assert.ok(ok(await eyad('GET', '/api/notifications'), 'n').items.some((x) => x.kind === 'request_approved'));
+    assert.equal(ok(await eyad('POST', `/api/act/requests/${q.id}`, { action: 'done' }), 'd').item.status, 'done');
+  });
+  await test('تعهدات: الموافقة من صاحب التعهد فقط مع التوقيت', async () => {
+    const c = ok(await rawan('POST', '/api/c/commitments', { title: 'الالتزام بموعد الاتصال', promiser: E.id, status: 'accepted' }), 'c').item;
+    assert.equal(c.status, 'pending');
+    assert.equal((await rawan('POST', `/api/act/commitments/${c.id}`, { action: 'accept' })).status, 403);
+    const a = ok(await eyad('POST', `/api/act/commitments/${c.id}`, { action: 'accept' }), 'a').item;
+    assert.equal(a.status, 'accepted'); assert.equal(a.accepted_by, E.id); assert.ok(a.accepted_at);
+    const self = ok(await eyad('POST', '/api/c/commitments', { title: 'تعهد ذاتي', promiser: E.id }), 's').item; assert.equal(self.status, 'accepted');
+  });
+  await test('اتفاقيات: موافقة الطرفين، والتعديل يعيد طلب الموافقة', async () => {
+    const g = ok(await eyad('POST', '/api/c/agreements', { title: 'ميزانية السفر', details: '5000', e_approved_at: 'x' }), 'g').item;
+    assert.equal(g.e_approved_at, null); assert.equal(g.version, 1);
+    ok(await eyad('POST', `/api/act/agreements/${g.id}`, { action: 'approve' }), 'e');
+    assert.equal((await eyad('POST', `/api/act/agreements/${g.id}`, { action: 'approve' })).status, 409);
+    const both = ok(await rawan('POST', `/api/act/agreements/${g.id}`, { action: 'approve' }), 'r').item;
+    assert.ok(both.e_approved_at && both.r_approved_at);
+    const ed = ok(await rawan('PATCH', `/api/c/agreements/${g.id}`, { details: '6000' }), 'edit').item;
+    assert.equal(ed.e_approved_at, null); assert.equal(ed.r_approved_at, null); assert.equal(ed.version, 2);
+    const notes = ok(await eyad('PATCH', `/api/c/agreements/${g.id}`, { notes: 'ملاحظة فقط' }), 'n').item; assert.equal(notes.version, 2);
+  });
+  await test('ذكرياتنا: كل شخص يكتب تعليقه فقط', async () => {
+    const m = ok(await eyad('POST', '/api/c/memories', { title: 'يوم الجمعة', date: '2030-01-10', comment_e: 'يوم جميل', comment_r: 'مزوّر' }), 'm').item;
+    assert.equal(m.comment_e, 'يوم جميل'); assert.equal(m.comment_r, null);
+    assert.equal(ok(await rawan('PATCH', `/api/c/memories/${m.id}`, { comment_r: 'أحلى يوم', comment_e: 'x' }), 'r').item.comment_e, 'يوم جميل');
+  });
+  await test('خطة يوم + أنشطة، اعترافات (تعهد + قراءة)، أغراض، تذكير متكرر', async () => {
+    const o = ok(await eyad('POST', '/api/c/outings', { title: 'جمعتنا', date: '2030-01-11', start_time: '17:00' }), 'o').item;
+    ok(await eyad('POST', '/api/c/outing_items', { outing_id: o.id, time: '18:00', title: 'العشاء', kind: 'restaurant' }), 'i');
+    const pl = ok(await eyad('POST', '/api/pledge/agree'), 'p').pledge; assert.ok(pl[E.id].at);
+    assert.ok(ok(await rawan('GET', '/api/bootstrap'), 'b').space.pledge[E.id]);
+    const c = ok(await rawan('POST', '/api/c/confessions', { body: 'كنت أتمنى نقضي وقتًا أطول', needs_talk: true }), 'c').item;
+    assert.equal((await eyad('PATCH', `/api/c/confessions/${c.id}`, { body: 'x' })).status, 403);
+    assert.ok(ok(await eyad('POST', `/api/act/confessions/${c.id}`, { action: 'read' }), 'r').item.read_at);
+    const n = ok(await rawan('POST', '/api/c/needs', { name: 'شاحن', priority: 'critical' }), 'n').item;
+    const b = ok(await eyad('PATCH', `/api/c/needs/${n.id}`, { bought: true, price: 59 }), 'b').item; assert.equal(b.bought_by, E.id);
+    const t = new Date(Date.now() + 3 * 3600000 - 60000).toISOString(); 
+    ok(await rawan('POST', '/api/c/reminders', { title: 'راجع موضوع الحجز', target: E.id, date: t.slice(0, 10), time: t.slice(11, 16), repeat: 'weekly' }), 'rem');
+    await fetch(BASE + '/__scheduled?cron=*/15+*+*+*+*'); await new Promise((r) => setTimeout(r, 800));
+    assert.ok(ok(await eyad('GET', '/api/notifications'), 'n').items.some((x) => x.kind === 'reminder' && /راجع موضوع الحجز/.test(x.title)));
+    const rem = ok(await eyad('GET', '/api/bootstrap'), 'b').data.reminders.find((x) => x.title === 'راجع موضوع الحجز');
+    assert.ok(rem.date > t.slice(0, 10), 'weekly reminder should move to next week');
+  });
+
   console.log('\nالحساب والاستعادة');
   await test('استعادة كلمة المرور برمز الاستعادة', async () => { const c = client(); const d = ok(await c('POST', '/api/auth/recover', { email: 'eyad@example.com', code: recovery.toLowerCase(), password: 'new-password-1' }), 'rec'); assert.ok(d.recovery_code !== recovery); assert.equal((await eyad('GET', '/api/bootstrap')).status, 401); });
   await test('رابط إعادة تعيين من الطرف الآخر', async () => {

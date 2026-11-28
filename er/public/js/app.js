@@ -11,11 +11,11 @@ const ROUTES = [
   ['plans', 'plans'], ['plans/:month', 'plans'], ['more', 'more'], ['dates', 'dates'], ['mood', 'mood'],
   ['places', 'places'], ['bucket', 'bucket'], ['trips', 'trips'], ['trips/:id', 'trip'], ['honeymoon', 'honeymoon'],
   ['shopping', 'shopping'], ['expenses', 'expenses'], ['notes', 'notes'], ['cycle', 'cycle'], ['settings', 'settings'],
-  ['notifications', 'notifications'], ['since', 'since'],
+  ['notifications', 'notifications'], ['since', 'since'], ['s/:key', 's'], ['outing/:id', 'outing'], ['anniv', 'anniv'],
 ];
 const AUTH_ROUTES = ['login', 'setup', 'join/:token', 'reset/:token', 'recover'];
 const NAV = [['', 'home', 'الرئيسية', 'الرئيسية'], ['calendar', 'calendar', 'التقويم', 'التقويم'], ['tasks', 'tasks', 'المهام', 'المهام'], ['plans', 'plans', 'الخطط', 'الخطط'], ['more', 'more', 'المزيد', 'المزيد']];
-const MORE_SECTIONS = new Set(['since', 'dates', 'mood', 'places', 'bucket', 'trips', 'trip', 'honeymoon', 'shopping', 'expenses', 'notes', 'cycle', 'settings', 'notifications', 'more']);
+const MORE_SECTIONS = new Set(['s', 'outing', 'anniv', 'since', 'dates', 'mood', 'places', 'bucket', 'trips', 'trip', 'honeymoon', 'shopping', 'expenses', 'notes', 'cycle', 'settings', 'notifications', 'more']);
 
 function match(hash, routes) {
   const path = hash.replace(/^#\/?/, '').split('?')[0].replace(/\/$/, '');
@@ -46,7 +46,7 @@ function shell() {
 function setNav(name) {
   const key = MORE_SECTIONS.has(name) ? 'more' : name === 'task' ? 'tasks' : name;
   document.querySelectorAll('[data-nav]').forEach((a) => a.classList.toggle('on', a.dataset.nav === key));
-  document.getElementById('fab')?.classList.toggle('hidden', ['settings', 'cycle', 'notifications', 'shopping', 'more', 'since'].includes(name));
+  document.getElementById('fab')?.classList.toggle('hidden', ['settings', 'cycle', 'notifications', 'shopping', 'more', 'since', 's', 'outing', 'anniv'].includes(name));
 }
 
 async function render(full = true) {
@@ -82,7 +82,7 @@ onChange(queueRender);
 
 // friendly live-sync toast when the partner changes something
 const VERB = { create: ['أضاف', 'أضافت'], update: ['عدّل', 'عدّلت'], delete: ['حذف', 'حذفت'] };
-const WHAT = { tasks: 'مهمة', events: 'موعدًا', dates: 'مناسبة', plans: 'خطة', notes: 'رسالة', shopping: 'للمقاضي', expenses: 'مصروفًا', places: 'مكانًا', bucket: 'أمنية', trips: 'رحلة', honeymoon: 'وجهة', moods: 'مزاجه' };
+const WHAT = { wishes: 'أمنية', outings: 'خطة خروج', memories: 'ذكرى', visited: 'مكانًا زرناه', appointments: 'موعدًا', daily_tasks: 'مهمة يومية', cravings: 'رغبة', confessions: 'اعترافًا', upsets: 'موقفًا', joys: 'إلى دليله', urgent: 'أمرًا عاجلًا', requests: 'طلبًا', commitments: 'تعهدًا', agreements: 'اتفاقية', needs: 'غرضًا', reminders: 'تذكيرًا', tasks: 'مهمة', events: 'موعدًا', dates: 'مناسبة', plans: 'خطة', notes: 'رسالة', shopping: 'للمقاضي', expenses: 'مصروفًا', places: 'مكانًا', bucket: 'أمنية', trips: 'رحلة', honeymoon: 'وجهة', moods: 'مزاجه' };
 onRemoteEvent((events) => {
   const shown = events.filter((e) => e.op === 'create' && WHAT[e.col]).slice(-2);
   for (const e of shown) {

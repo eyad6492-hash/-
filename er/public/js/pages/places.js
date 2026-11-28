@@ -10,7 +10,7 @@ const st = { cat: 'all', tab: 'try', view: 'cards' };
 const price = (n) => (n ? '$'.repeat(n) : '');
 
 let leafletLoading = null;
-function loadLeaflet() {
+export function loadLeaflet() {
   if (window.L?.map) return Promise.resolve(window.L);
   if (!leafletLoading) leafletLoading = new Promise((ok, no) => {
     const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = '/vendor/leaflet/leaflet.css'; document.head.appendChild(css);

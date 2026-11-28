@@ -97,4 +97,5 @@ function put(col, item) { (store.data[col] ||= new Map()).set(item.id, item); sa
 export async function create(col, values) { const { item } = await post(`/api/c/${col}`, values); return put(col, item); }
 export async function update(col, id, values) { const { item } = await patch(`/api/c/${col}/${id}`, values); return put(col, item); }
 export async function remove(col, id) { await del(`/api/c/${col}/${id}`); store.data[col]?.delete(id); for (const [c, m] of Object.entries(store.data)) if (c !== col) for (const [k, r] of m) if ((c === 'task_comments' && r.task_id === id) || (c === 'trip_items' && r.trip_id === id)) m.delete(k); saveSoon(); emit(); }
+export const putItem = put;
 export function refreshSoon() { setTimeout(syncNow, 150); }

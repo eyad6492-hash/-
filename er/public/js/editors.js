@@ -219,7 +219,13 @@ export async function quickAdd(date = null) {
     { k: 'date', l: 'مناسبة', icon: 'gift', tone: 'brown' }, { k: 'plan', l: 'خطة', icon: 'plans' },
     { k: 'trip', l: 'رحلة', icon: 'plane' }, { k: 'expense', l: 'مصروف', icon: 'wallet', tone: 'brown' },
     { k: 'shop', l: 'مقاضي', icon: 'bag', tone: 'sage' }, { k: 'note', l: 'رسالة', icon: 'note', tone: 'rose' },
+    { k: 'daily_tasks', l: 'مهمة يومية', icon: 'tasks' }, { k: 'reminders', l: 'ذكّرني', icon: 'bell', tone: 'rose' }, { k: 'outings', l: 'خطة يوم', icon: 'route', tone: 'brown' }, { k: 'cravings', l: 'نفسي في…', icon: 'coffee', tone: 'sage' },
+    { k: 'appointments', l: 'موعد طبي', icon: 'clock' }, { k: 'urgent', l: 'أمر عاجل', icon: 'flag', tone: 'rose' }, { k: 'wishes', l: 'أمنية', icon: 'star', tone: 'brown' }, { k: 'requests', l: 'طلب', icon: 'send', tone: 'sage' },
   ], 'أضف ما تريد');
+  if (['daily_tasks', 'reminders', 'outings', 'cravings', 'appointments', 'urgent', 'wishes', 'requests'].includes(k)) {
+    const { editIn } = await import('./sections.js');
+    return editIn(k, null, date && ['daily_tasks', 'outings', 'cravings', 'appointments', 'reminders'].includes(k) ? { date, when: 'date' } : {});
+  }
   const d = date || undefined;
   ({
     event: () => editEvent(null, d ? { date: d } : {}), task: () => editTask(null, d ? { due_date: d } : {}),

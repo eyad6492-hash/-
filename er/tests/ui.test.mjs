@@ -96,11 +96,75 @@ async function main() {
     await e.goto(BASE + '/#/settings'); await e.click('[data-set=numerals][data-v=latn]'); await e.waitForTimeout(300);
   });
 
-  const routes = ['since', '', 'calendar', 'tasks', 'plans', 'more', 'dates', 'mood', 'places', 'bucket', 'trips', 'honeymoon', 'shopping', 'expenses', 'notes', 'settings', 'notifications'];
+  // ======================= v3 sections =======================
+  const openSec = async (p, key) => { await p.goto(`${BASE}/#/s/${key}`); await p.waitForSelector('.page-head'); };
+  const addIn = async (p) => { await p.click('.page-head [data-new]'); await p.waitForSelector('.sheet [data-save]'); };
+  const detailAction = async (p, text) => { await p.click(`.sheet .act-grid button:has-text("${text}")`); await p.waitForTimeout(350); };
+  await step('أمنياتنا: روان تضيف، إياد يختارها «اخترت أمنية لك»، روان تُشعَر', async () => {
+    await openSec(r, 'wishes'); await r.click('[data-tab=me]'); await addIn(r); await fill(r, 'title', 'عشاء على البحر'); await r.click('.sheet [data-seg="category"][data-v="restaurant"]'); await save(r);
+    await openSec(e, 'wishes'); await e.waitForSelector('text=عشاء على البحر', { timeout: 12000 }); await e.click('[data-open]'); await detailAction(e, 'اخترت أمنية لك');
+    await e.fill('.sheet [data-k="pick_date"]', '2030-02-14'); await save(e); await e.waitForTimeout(400);
+    await openSec(e, 'wishes'); await e.click('[data-tab=picked]'); await e.waitForSelector('text=اخترتها ✨'); await shot(e, '20-wishes');
+    await r.goto(BASE + '/#/notifications'); await r.waitForSelector('text=أمنية', { timeout: 12000 });
+    await r.goto(BASE + '/#/'); await r.waitForSelector('text=بانتظارك', { timeout: 12000 });
+  });
+  await step('جدول يومنا: خطة + أنشطة مرتبة بالوقت + «وثّق يومنا كذكرى»', async () => {
+    await openSec(e, 's'.length ? 'outings' : ''); await addIn(e); await fill(e, 'title', 'خطة يوم الجمعة'); await e.fill('.sheet [data-k="date"]', new Date(Date.now() + 3 * 3600000).toISOString().slice(0, 10)); await save(e);
+    await e.waitForURL(/#\/outing\//); await e.waitForSelector('[data-add]');
+    for (const [tm, ti] of [['20:00', 'نشاط البولينغ'], ['18:00', 'العشاء'], ['22:00', 'قهوة وحلى']]) { await e.click('[data-add]'); await e.fill('.sheet [data-k="time"]', tm); await fill(e, 'title', ti); await save(e); }
+    const order = await e.$$eval('.sch-card .grow > div:first-child', (x) => x.map((n) => n.textContent));
+    if (order.join('|') !== 'العشاء|نشاط البولينغ|قهوة وحلى') throw new Error('not sorted by time: ' + order.join('|'));
+    await shot(e, '21-outing'); await e.click('[data-memory]'); await e.waitForSelector('.sheet [data-k="title"]'); await e.click('.sheet [data-star="5"]'); await save(e);
+    await e.waitForSelector('text=موثّق كذكرى'); await openSec(e, 'memories'); await e.waitForSelector('.tl-item'); await shot(e, '22-memories');
+  });
+  await step('طلباتنا: إياد يرسل طلبًا وروان توافق', async () => {
+    await openSec(e, 'requests'); await addIn(e); await fill(e, 'title', 'نطلع نتمشى المغرب'); await save(e);
+    await openSec(r, 'requests'); await r.waitForSelector('text=نطلع نتمشى المغرب', { timeout: 12000 }); await r.click('[data-open]'); await detailAction(r, 'موافقة');
+    await openSec(e, 'requests'); await e.click('[data-tab=fromme]'); await e.waitForSelector('text=تمت الموافقة', { timeout: 12000 });
+  });
+  await step('اتفاقياتنا: موافقة الطرفين', async () => {
+    await openSec(e, 'agreements'); await addIn(e); await fill(e, 'title', 'ميزانية الرحلة 5000'); await save(e);
+    await e.click('[data-tab=wait]'); await e.click('[data-open]'); await detailAction(e, 'أوافق على الاتفاق');
+    await openSec(r, 'agreements'); await r.click('[data-tab=wait]'); await r.waitForSelector('text=ميزانية الرحلة', { timeout: 12000 }); await r.click('[data-open]'); await detailAction(r, 'أوافق على الاتفاق');
+    await openSec(r, 'agreements'); await r.click('[data-tab=act]'); await r.waitForSelector('text=تمت الموافقة من الطرفين', { timeout: 12000 }); await r.click('[data-open]'); await r.waitForSelector('.contract'); await shot(r, '23-agreement'); await r.keyboard.press('Escape');
+  });
+  await step('تعهداتنا: روان تطلب تعهدًا وإياد يوقّع', async () => {
+    await openSec(r, 'commitments'); await addIn(r); await fill(r, 'title', 'الالتزام بموعد الاتصال'); await save(r);
+    await openSec(e, 'commitments'); await e.waitForSelector('text=الالتزام بموعد الاتصال', { timeout: 12000 }); await e.click('[data-open]'); await detailAction(e, 'أوافق وأتعهد');
+    await openSec(r, 'commitments'); await r.waitForSelector('text=ساري', { timeout: 12000 });
+  });
+  await step('اعترافات: التعهد مطلوب قبل الدخول، ثم الكتابة', async () => {
+    await openSec(e, 'confessions'); await e.waitForSelector('.pledge [data-pledge]'); await shot(e, '24-pledge'); await e.click('[data-pledge]'); await e.waitForSelector('.page-head [data-new]');
+    await addIn(e); await e.fill('.sheet [data-k="body"]', 'كنت أتمنى نقضي وقتًا أطول سوا'); await save(e);
+    await openSec(r, 'confessions'); await r.waitForSelector('[data-pledge]'); await r.click('[data-pledge]'); await r.waitForSelector('text=كنت أتمنى', { timeout: 12000 });
+  });
+  await step('شيء زعلني منك + كيف تسعدني؟ + وش نفسك فيه', async () => {
+    await openSec(r, 'upsets'); await addIn(r); await fill(r, 'title', 'تأخر الرد'); await save(r);
+    await openSec(r, 'joys'); await r.click('[data-tab=me]'); await r.click('[data-newk=joy]'); await fill(r, 'title', 'السؤال عني خلال اليوم'); await save(r); await shot(r, '25-joys');
+    await openSec(e, 'cravings'); await addIn(e); await fill(e, 'text', 'بيتزا'); await save(e);
+    await openSec(r, 'cravings'); await r.waitForSelector('text=بيتزا', { timeout: 12000 }); await r.click('[data-open]'); await detailAction(r, 'حوّلها لطلب'); await r.waitForSelector('.sheet [data-k="title"]'); await save(r);
+  });
+  await step('أغراض ناقصتني → المقاضي، أشياء عاجلة في الرئيسية، تذكير، موعد طبي، مهمة يومية، مكان زرناه', async () => {
+    await openSec(r, 'needs'); await addIn(r); await fill(r, 'name', 'شاحن جوال'); await save(r); await r.click('[data-open]'); await detailAction(r, 'أضفه لقائمة المقاضي');
+    await r.goto(BASE + '/#/shopping'); await r.waitForSelector('text=شاحن جوال');
+    await openSec(e, 'urgent'); await addIn(e); await fill(e, 'title', 'تجديد الإقامة'); await save(e);
+    await openSec(r, 'reminders'); await addIn(r); await fill(r, 'title', 'راجع موضوع الحجز'); await save(r);
+    await openSec(e, 'appointments'); await addIn(e); await fill(e, 'title', 'مراجعة الأسنان'); await save(e);
+    await openSec(e, 'daily_tasks'); await addIn(e); await fill(e, 'title', 'الاتصال بالفندق'); await save(e); await e.click('[data-check]'); await e.waitForTimeout(300);
+    await openSec(e, 'visited'); await addIn(e); await fill(e, 'name', 'كافيه البحر'); await save(e); await e.fill('#sq', 'البحر'); await e.waitForTimeout(500); await e.waitForSelector('text=كافيه البحر');
+    await e.goto(BASE + '/#/'); await e.waitForSelector('text=أشياء عاجلة'); await e.waitForSelector('text=راجع موضوع الحجز', { timeout: 12000 }); await e.waitForSelector('text=مراجعة الأسنان'); await shot(e, '26-home-v3');
+  });
+  await step('ذكرى يوم عرفنا بعض + الذكرى السنوية ضمن المناسبات', async () => {
+    await e.goto(BASE + '/#/anniv'); await e.waitForSelector('text=الذكرى القادمة'); await e.click('[data-m] >> nth=0'); await fill(e, 'did', 'عشاء وكيك'); await save(e); await shot(e, '27-anniv');
+    await e.goto(BASE + '/#/dates'); await e.waitForSelector('text=ذكرى يوم عرفنا بعض');
+    await e.goto(BASE + '/#/more'); await e.waitForSelector('text=تواصلنا'); await shot(e, '28-more');
+  });
+
+  const routes = ['s/wishes', 's/outings', 's/memories', 's/visited', 's/appointments', 's/daily_tasks', 's/cravings', 's/confessions', 's/upsets', 's/joys', 's/urgent', 's/requests', 's/commitments', 's/agreements', 's/needs', 's/reminders', 'anniv', 'since', '', 'calendar', 'tasks', 'plans', 'more', 'dates', 'mood', 'places', 'bucket', 'trips', 'honeymoon', 'shopping', 'expenses', 'notes', 'settings', 'notifications'];
   await step('كل الصفحات تعمل (إياد)', async () => {
     const english = [];
     for (const [i, rt] of routes.entries()) {
-      await e.goto(`${BASE}/#/${rt}`); await e.waitForSelector('.page-head, .greet', { timeout: 8000 }); await e.waitForTimeout(150); await shot(e, `10-${String(i).padStart(2, '0')}-${rt || 'home'}`);
+      await e.goto(`${BASE}/#/${rt}`); await e.waitForSelector('.page-head, .greet', { timeout: 8000 }); await e.waitForTimeout(150); await shot(e, `10-${String(i).padStart(2, '0')}-${(rt || 'home').replace('/', '-')}`);
       const words = await e.evaluate(() => { const out = []; const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT); for (let n = w.nextNode(); n; n = w.nextNode()) { if (n.parentElement.closest('[dir=ltr], .code-box, .leaflet-control-attribution, script, style, .logo')) continue; const m = n.data.match(/[A-Za-z]{2,}/g); if (m) out.push(...m.filter((x) => !/^(E|R|ER)$/.test(x))); } return out; });
       if (words.length) english.push(`${rt || 'home'}: ${[...new Set(words)].join(' ')}`);
     }
