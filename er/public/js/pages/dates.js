@@ -25,16 +25,16 @@ export default {
     </div>`;
     const first = upcoming[0];
     el.innerHTML = `<div class="page">
-      ${pageHead({ en: 'Our Important Dates', ar: 'تواريخنا المهمة', back: '#/more', actions: `<button class="btn sm" data-new>${icon('plus', 'sm')} مناسبة</button>` })}
+      ${pageHead({ en: 'لا تنسوها', ar: 'تواريخنا المهمة', back: '#/more', actions: `<button class="btn sm" data-new>${icon('plus', 'sm')} مناسبة</button>` })}
       ${first ? `<div class="hero tap" data-open="${first.d.id}" style="margin-bottom:14px">
-        <span class="en" style="color:var(--rose-ink);font-size:16px">${first.n === 0 ? 'Today' : 'Coming up'}</span>
+        <span class="en" style="color:var(--rose-ink);font-size:14px">${first.n === 0 ? 'اليوم' : 'قريبًا'}</span>
         <div class="row" style="align-items:flex-end;gap:14px;margin-top:10px"><div><div class="big num">${first.n === 0 ? '✦' : first.n}</div><div class="unit">${countdown(first.n)}</div></div>
         <div class="grow"><div style="font-weight:600;font-size:17px">${esc(first.d.title)}</div><div class="small" style="color:var(--ink2)">${fmtGreg(first.o.date, { weekday: true })}<br>${fmtHijri(first.o.date)}</div></div></div>
         ${milestone(first.n) ? `<div class="badge dark" style="margin-top:12px">${milestone(first.n)}</div>` : ''}</div>` : ''}
       ${kinds.length > 1 ? `<div class="chips"><button class="chip ${st.kind === 'all' ? 'on' : ''}" data-k="all">الكل</button>${kinds.map((k) => `<button class="chip ${st.kind === k ? 'on' : ''}" data-k="${k}">${esc(L.dateKinds[k] || k)}</button>`).join('')}</div>` : ''}
       ${upcoming.length ? `<div class="card">${upcoming.map(row).join('')}</div>` : ''}
-      ${past.length ? `<div class="section-title"><h2>تواريخ مضت</h2><span class="en">Memories</span></div><div class="card">${past.map(row).join('')}</div>` : ''}
-      ${!items.length ? empty('Every date matters', 'سجّلوا أعياد الميلاد، تاريخ الخطوبة، أول لقاء، أول محادثة…', `<br><button class="btn sm" data-new>${icon('plus', 'sm')} أول مناسبة</button>`) : ''}
+      ${past.length ? `<div class="section-title"><h2>تواريخ مضت</h2><span class="en">ذكريات</span></div><div class="card">${past.map(row).join('')}</div>` : ''}
+      ${!items.length ? empty('كل تاريخ يعني لنا', 'سجّلوا أعياد الميلاد، تاريخ الخطوبة، أول لقاء، أول محادثة…', `<br><button class="btn sm" data-new>${icon('plus', 'sm')} أول مناسبة</button>`) : ''}
     </div>`;
     el.onclick = (e) => {
       const q = (s) => e.target.closest(s); let b;
@@ -49,7 +49,7 @@ function view(d) {
   if (!d) return;
   const t = today(); const o = nextOccurrence(d, t); const n = o ? diffDays(t, o.date) : null;
   openSheet({
-    title: d.title, en: L.dateKinds[d.kind] || 'Important Date',
+    title: d.title, en: L.dateKinds[d.kind] || 'مناسبة',
     body: `${d.image_id ? img(d.image_id, 'cover') + '<div style="height:12px"></div>' : ''}
       <div class="row between"><div><div class="small muted">${d.recurring ? 'الموعد القادم' : 'التاريخ'}</div><div style="font-weight:600">${o ? fmtGreg(o.date, { weekday: true }) : ''}</div><div class="small">${o ? fmtHijri(o.date) : ''}</div></div>${n !== null ? `<div class="cd ${n === 0 ? 'today' : ''}" style="padding:10px 14px"><b class="num">${n === 0 ? '✦' : Math.abs(n)}</b><span>${countdown(n)}</span></div>` : ''}</div>
       <div class="divider"></div>

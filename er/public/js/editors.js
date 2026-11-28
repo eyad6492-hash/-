@@ -25,7 +25,7 @@ const delFn = (col, row) => (row?.id ? () => remove(col, row.id) : null);
 
 export function editDate(row = null, defaults = {}) {
   openForm({
-    title: row ? 'تعديل المناسبة' : 'مناسبة جديدة', en: 'Important Date',
+    title: row ? 'تعديل المناسبة' : 'مناسبة جديدة', en: 'تواريخنا المهمة',
     values: { cal: 'g', recurring: 1, kind: 'special', remind: '1', ...defaults, ...(row || {}) },
     fields: [
       { k: 'title', label: 'اسم المناسبة', required: true, placeholder: 'مثال: ذكرى أول لقاء' },
@@ -43,7 +43,7 @@ export function editDate(row = null, defaults = {}) {
 
 export function editEvent(row = null, defaults = {}) {
   openForm({
-    title: row ? 'تعديل الموعد' : 'إضافة إلى التقويم', en: 'Calendar',
+    title: row ? 'تعديل الموعد' : 'إضافة إلى التقويم', en: 'التقويم',
     values: { type: 'appointment', date: today(), assignee: 'both', remind: '', ...defaults, ...(row || {}) },
     fields: [
       { k: 'title', label: 'العنوان', required: true, placeholder: 'مثال: عشاء، موعد طبيب…' },
@@ -63,7 +63,7 @@ export function editEvent(row = null, defaults = {}) {
 export function editTask(row = null, defaults = {}) {
   const partner = store.partner;
   openForm({
-    title: row ? 'تعديل المهمة' : 'مهمة جديدة', en: 'Our Tasks',
+    title: row ? 'تعديل المهمة' : 'مهمة جديدة', en: 'مهامنا',
     values: { priority: 'medium', status: 'pending', assignee: partner ? 'both' : store.me.id, remind: '', ...defaults, ...(row || {}) },
     fields: [
       { k: 'title', label: 'اسم المهمة', required: true },
@@ -81,7 +81,7 @@ export function editTask(row = null, defaults = {}) {
 
 export function editPlan(row = null, defaults = {}) {
   openForm({
-    title: row ? 'تعديل الخطة' : 'خطة جديدة', en: 'Our Monthly Plan',
+    title: row ? 'تعديل الخطة' : 'خطة جديدة', en: 'خطة الشهر',
     values: { month: monthKey(today()), priority: 'medium', status: 'not_started', assignee: 'both', remind: '', ...defaults, ...(row || {}) },
     fields: [
       { k: 'title', label: 'الخطة', required: true, placeholder: 'مثال: زيارة مطعم جديد' },
@@ -101,7 +101,7 @@ export function editPlan(row = null, defaults = {}) {
 
 export function editTrip(row = null, defaults = {}) {
   openForm({
-    title: row ? 'تعديل الرحلة' : 'رحلة جديدة', en: 'Our Travel Plans',
+    title: row ? 'تعديل الرحلة' : 'رحلة جديدة', en: 'رحلاتنا',
     values: { status: 'planning', remind: '3', ...defaults, ...(row || {}) },
     fields: [
       { k: 'name', label: 'اسم الرحلة', required: true, placeholder: 'مثال: إجازة الصيف' },
@@ -123,7 +123,7 @@ export function editTrip(row = null, defaults = {}) {
 
 export function editExpense(row = null, defaults = {}) {
   openForm({
-    title: row ? 'تعديل المصروف' : 'مصروف جديد', en: 'Our Expenses',
+    title: row ? 'تعديل المصروف' : 'مصروف جديد', en: 'مصروفاتنا',
     values: { date: today(), category: 'food', paid_by: store.me.id, ...defaults, ...(row || {}) },
     fields: [
       { k: 'title', label: 'اسم المصروف', required: true },
@@ -141,7 +141,7 @@ export function editExpense(row = null, defaults = {}) {
 
 export function editShopping(row = null, defaults = {}) {
   openForm({
-    title: row ? 'تعديل المنتج' : 'منتج جديد', en: 'Shopping List',
+    title: row ? 'تعديل المنتج' : 'منتج جديد', en: 'المقاضي',
     values: { category: 'groceries', remind: '', ...defaults, ...(row || {}) },
     fields: [
       { k: 'name', label: 'المنتج', required: true },
@@ -157,7 +157,7 @@ export function editShopping(row = null, defaults = {}) {
 
 export function editNote(row = null, defaults = {}) {
   openForm({
-    title: row ? 'تعديل الرسالة' : 'رسالة صغيرة', en: 'Little Notes',
+    title: row ? 'تعديل الرسالة' : 'رسالة صغيرة', en: 'رسائلنا الصغيرة',
     values: { kind: 'morning', color: 'cream', date: today(), ...defaults, ...(row || {}) },
     fields: [
       { k: 'kind', label: 'النوع', type: 'seg', options: opts(L.noteKinds) },
@@ -175,7 +175,7 @@ export function editNote(row = null, defaults = {}) {
 
 export function editPlace(row = null, defaults = {}) {
   openForm({
-    title: row ? 'تعديل المكان' : 'مكان جديد', en: 'Places We Love',
+    title: row ? 'تعديل المكان' : 'مكان جديد', en: 'أماكننا',
     values: { category: 'restaurant', visited: 0, ...defaults, ...(row || {}) },
     fields: [
       { k: 'name', label: 'الاسم', required: true },
@@ -198,7 +198,7 @@ export function editPlace(row = null, defaults = {}) {
 
 export function editBucket(row = null, defaults = {}) {
   openForm({
-    title: row ? 'تعديل' : 'إضافة للقائمة', en: 'Our Bucket List',
+    title: row ? 'تعديل' : 'إضافة للقائمة', en: 'قائمة الأمنيات',
     values: { status: 'wishlist', ...defaults, ...(row || {}) },
     fields: [
       { k: 'title', label: 'المكان أو النشاط', required: true },
@@ -219,7 +219,7 @@ export async function quickAdd(date = null) {
     { k: 'date', l: 'مناسبة', icon: 'gift', tone: 'brown' }, { k: 'plan', l: 'خطة', icon: 'plans' },
     { k: 'trip', l: 'رحلة', icon: 'plane' }, { k: 'expense', l: 'مصروف', icon: 'wallet', tone: 'brown' },
     { k: 'shop', l: 'مقاضي', icon: 'bag', tone: 'sage' }, { k: 'note', l: 'رسالة', icon: 'note', tone: 'rose' },
-  ], 'Quick Add');
+  ], 'أضف ما تريد');
   const d = date || undefined;
   ({
     event: () => editEvent(null, d ? { date: d } : {}), task: () => editTask(null, d ? { due_date: d } : {}),

@@ -139,6 +139,15 @@ async function main() {
     assert.equal(ok(await eyad('GET', '/api/notifications'), 'n').items.filter((n) => /موعد الأسنان/.test(n.title)).length, 1, 'reminder sent twice');
   });
 
+  await test('منذ أن عرفنا بعض: حفظ مشترك وتحقق من القيم', async () => {
+    assert.equal((await eyad('PATCH', '/api/space', { since: { at: '2023-06-16 15:36' } })).status, 400);
+    ok(await eyad('PATCH', '/api/space', { since: { at: '2023-06-16T15:36:25', note: 'أول لقاء ❤️', show_home: true } }), 'since');
+    const d = ok(await rawan('GET', '/api/bootstrap'), 'b').space.since;
+    assert.equal(d.at, '2023-06-16T15:36:25'); assert.equal(d.tz, 'Asia/Riyadh'); assert.equal(d.note, 'أول لقاء ❤️'); assert.equal(d.updated_by, E.id);
+    const s = ok(await rawan('GET', `/api/sync?since=${cursor}`), 's'); assert.equal(s.space.since.at, '2023-06-16T15:36:25');
+  });
+  await test('إعداد الأرقام العربية يُحفظ', async () => { ok(await rawan('PATCH', '/api/me', { settings: { numerals: 'arab' } }), 'n'); assert.equal(ok(await rawan('GET', '/api/me'), 'me').settings.numerals, 'arab'); ok(await rawan('PATCH', '/api/me', { settings: { numerals: 'nope' } }), 'n2'); assert.equal(ok(await rawan('GET', '/api/me'), 'me').settings.numerals, 'arab'); });
+
   console.log('\nالحساب والاستعادة');
   await test('استعادة كلمة المرور برمز الاستعادة', async () => { const c = client(); const d = ok(await c('POST', '/api/auth/recover', { email: 'eyad@example.com', code: recovery.toLowerCase(), password: 'new-password-1' }), 'rec'); assert.ok(d.recovery_code !== recovery); assert.equal((await eyad('GET', '/api/bootstrap')).status, 401); });
   await test('رابط إعادة تعيين من الطرف الآخر', async () => {

@@ -14,7 +14,7 @@ const TABS = [['overview', 'نظرة عامة'], ['place', 'أماكن'], ['rest
 function editItem(trip, section, row = null) {
   const dated = ['itinerary', 'activity', 'place', 'restaurant', 'expense'].includes(section);
   openForm({
-    title: row ? 'تعديل' : `إضافة — ${L.tripSections[section]}`, en: L.tripSectionsEn[section],
+    title: row ? 'تعديل' : `إضافة — ${L.tripSections[section]}`, en: 'رحلتنا',
     values: { section, date: section === 'itinerary' ? trip.start_date : null, ...(row || {}) },
     fields: [
       { k: 'title', label: section === 'checklist' ? 'الغرض' : section === 'expense' ? 'البند' : 'العنوان', required: true },
@@ -32,7 +32,7 @@ function editItem(trip, section, row = null) {
 export default {
   render(el, { id }) {
     const trip = byId('trips', id), t = today();
-    if (!trip) { el.innerHTML = `<div class="page">${pageHead({ en: 'Trip', ar: 'الرحلة', back: '#/trips' })}<div class="empty">الرحلة غير موجودة</div></div>`; return; }
+    if (!trip) { el.innerHTML = `<div class="page">${pageHead({ en: 'رحلة', ar: 'الرحلة', back: '#/trips' })}<div class="empty">الرحلة غير موجودة</div></div>`; return; }
     if (st.tripId !== id) { st.tripId = id; st.tab = 'overview'; }
     const items = all('trip_items').filter((i) => i.trip_id === id);
     const sec = (s) => items.filter((i) => i.section === s).sort((a, b) => ((a.date || '9') + (a.time || '')).localeCompare((b.date || '9') + (b.time || '')) || a.created_at.localeCompare(b.created_at));
@@ -50,10 +50,10 @@ export default {
     let body = '';
     if (st.tab === 'overview') {
       body = `<div class="stats3"><div class="stat"><b class="num">${days ?? '—'}</b><span>${days === 1 ? 'يوم' : 'أيام'}</span></div><div class="stat"><b class="num">${checklist.filter((c) => c.done).length}/${checklist.length}</b><span>التجهيز</span></div><div class="stat"><b class="num">${items.filter((i) => ['place', 'restaurant', 'activity'].includes(i.section)).length}</b><span>أماكن وأنشطة</span></div></div>
-        <div class="card" style="margin-top:12px"><div class="card-head"><h3>${icon('plane', 'sm')} الطيران</h3><span class="en">Flight Details</span></div>${trip.flight_details ? `<div style="white-space:pre-wrap">${esc(trip.flight_details)}</div>` : '<div class="small muted">لم تُضف تفاصيل بعد</div>'}${trip.flight_url ? `<a class="btn sm soft" style="margin-top:10px" href="${esc(trip.flight_url)}" target="_blank" rel="noopener">${icon('link', 'sm')} رابط الحجز</a>` : ''}</div>
-        <div class="card"><div class="card-head"><h3>${icon('hotel', 'sm')} الفندق</h3><span class="en">Hotel</span></div>${trip.hotel_details ? `<div style="white-space:pre-wrap">${esc(trip.hotel_details)}</div>` : '<div class="small muted">لم تُضف تفاصيل بعد</div>'}${trip.hotel_url ? `<a class="btn sm soft" style="margin-top:10px" href="${esc(trip.hotel_url)}" target="_blank" rel="noopener">${icon('link', 'sm')} رابط الفندق</a>` : ''}</div>
-        <div class="card"><div class="card-head"><h3>${icon('wallet', 'sm')} الميزانية</h3><span class="en">Budget</span></div><div class="row between"><div class="stat"><b class="num" style="font-size:22px">${money(spent)}</b><span>المصروف</span></div>${trip.budget ? `<div class="stat" style="text-align:left"><b class="num" style="font-size:22px">${money(trip.budget - spent)}</b><span>المتبقي</span></div>` : ''}</div>${trip.budget ? `<div class="progress ${spent > trip.budget ? 'over' : ''}" style="margin-top:10px"><i style="width:${Math.min(100, (spent / trip.budget) * 100)}%"></i></div><div class="tiny muted" style="margin-top:4px">الميزانية ${money(trip.budget)}${planned ? ` · تكاليف مخططة ${money(planned)}` : ''}</div>` : ''}</div>
-        ${trip.notes ? `<div class="card"><div class="card-head"><h3>ملاحظات</h3><span class="en">Notes</span></div><div style="white-space:pre-wrap">${esc(trip.notes)}</div></div>` : ''}`;
+        <div class="card" style="margin-top:12px"><div class="card-head"><h3>${icon('plane', 'sm')} الطيران</h3><span class="en">تفاصيل الرحلة</span></div>${trip.flight_details ? `<div style="white-space:pre-wrap">${esc(trip.flight_details)}</div>` : '<div class="small muted">لم تُضف تفاصيل بعد</div>'}${trip.flight_url ? `<a class="btn sm soft" style="margin-top:10px" href="${esc(trip.flight_url)}" target="_blank" rel="noopener">${icon('link', 'sm')} رابط الحجز</a>` : ''}</div>
+        <div class="card"><div class="card-head"><h3>${icon('hotel', 'sm')} الفندق</h3><span class="en">الإقامة</span></div>${trip.hotel_details ? `<div style="white-space:pre-wrap">${esc(trip.hotel_details)}</div>` : '<div class="small muted">لم تُضف تفاصيل بعد</div>'}${trip.hotel_url ? `<a class="btn sm soft" style="margin-top:10px" href="${esc(trip.hotel_url)}" target="_blank" rel="noopener">${icon('link', 'sm')} رابط الفندق</a>` : ''}</div>
+        <div class="card"><div class="card-head"><h3>${icon('wallet', 'sm')} الميزانية</h3><span class="en">الحساب</span></div><div class="row between"><div class="stat"><b class="num" style="font-size:22px">${money(spent)}</b><span>المصروف</span></div>${trip.budget ? `<div class="stat" style="text-align:left"><b class="num" style="font-size:22px">${money(trip.budget - spent)}</b><span>المتبقي</span></div>` : ''}</div>${trip.budget ? `<div class="progress ${spent > trip.budget ? 'over' : ''}" style="margin-top:10px"><i style="width:${Math.min(100, (spent / trip.budget) * 100)}%"></i></div><div class="tiny muted" style="margin-top:4px">الميزانية ${money(trip.budget)}${planned ? ` · تكاليف مخططة ${money(planned)}` : ''}</div>` : ''}</div>
+        ${trip.notes ? `<div class="card"><div class="card-head"><h3>ملاحظات</h3><span class="en">تفاصيل</span></div><div style="white-space:pre-wrap">${esc(trip.notes)}</div></div>` : ''}`;
     } else if (st.tab === 'photos') {
       const photos = trip.photos || [];
       body = `${photos.length ? `<div class="gallery">${photos.map((p) => `<a href="${fileUrl(p)}" target="_blank"><img src="${fileUrl(p)}" loading="lazy" alt=""></a>`).join('')}</div>` : '<div class="card soft center small muted">لا توجد صور بعد</div>'}<button class="btn soft block" style="margin-top:12px" data-photos>${icon('image', 'sm')} إضافة / إدارة الصور</button>`;
@@ -79,7 +79,7 @@ export default {
       body += `<button class="btn soft block" style="margin-top:12px" data-add>${icon('plus', 'sm')} إضافة</button>`;
     }
     el.innerHTML = `<div class="page">
-      ${pageHead({ en: trip.honeymoon ? 'Our Honeymoon Trip' : 'Our Trip', ar: trip.name, back: '#/trips', actions: `<button class="icon-btn" data-edit aria-label="تعديل">${icon('edit')}</button>` })}
+      ${pageHead({ en: trip.honeymoon ? 'رحلة شهر العسل' : 'رحلتنا', ar: trip.name, back: '#/trips', actions: `<button class="icon-btn" data-edit aria-label="تعديل">${icon('edit')}</button>` })}
       ${trip.image_id ? img(trip.image_id, 'cover') : ''}
       <div class="row between" style="margin:12px 2px"><div><div style="font-weight:500">${esc(trip.destination || '')}</div><div class="small muted">${trip.start_date ? `${fmtGreg(trip.start_date)}${trip.end_date ? ' ← ' + fmtGreg(trip.end_date) : ''}` : 'لم يُحدد التاريخ'}</div>${trip.start_date ? `<div class="tiny muted">${fmtHijri(trip.start_date)}</div>` : ''}</div>${n !== null && n >= 0 ? `<div class="cd ${n === 0 ? 'today' : ''}"><b class="num">${n === 0 ? '✈︎' : n}</b><span>${countdown(n)}</span></div>` : ''}</div>
       <div class="chips">${TABS.map(([k, l]) => `<button class="chip ${st.tab === k ? 'on' : ''}" data-tab="${k}">${l}${['place', 'restaurant', 'activity', 'itinerary', 'checklist', 'expense'].includes(k) && sec(k).length ? ` <span class="tiny" style="opacity:.7">${sec(k).length}</span>` : ''}</button>`).join('')}</div>
@@ -94,7 +94,7 @@ export default {
         if ((b = q('[data-check]'))) { e.stopPropagation(); const i = byId('trip_items', b.dataset.check); b.classList.toggle('on'); return update('trip_items', i.id, { done: !i.done }); }
         if (q('[data-add]')) return editItem(trip, st.tab);
         if ((b = q('[data-item]'))) { const i = byId('trip_items', b.dataset.item); return editItem(trip, i.section, i); }
-        if (q('[data-photos]')) return openForm({ title: 'صور الرحلة', en: 'Photos', values: { photos: trip.photos || [] }, fields: [{ k: 'photos', label: 'الصور', type: 'images' }], onSubmit: async (v) => { await update('trips', id, { photos: v.photos || [] }); toast('تم الحفظ'); } });
+        if (q('[data-photos]')) return openForm({ title: 'صور الرحلة', en: 'ذكرياتنا', values: { photos: trip.photos || [] }, fields: [{ k: 'photos', label: 'الصور', type: 'images' }], onSubmit: async (v) => { await update('trips', id, { photos: v.photos || [] }); toast('تم الحفظ'); } });
       } catch (err) { toastErr(err); }
     };
   },

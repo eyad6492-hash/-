@@ -23,18 +23,18 @@ export default {
       ${p.image_id ? img(p.image_id, 'thumb') : `<span class="ic-box ${p.priority === 'high' ? 'rose' : ''}">${icon('flag')}</span>`}
       <div class="grow" style="min-width:0"><div style="font-weight:500" class="${p.status === 'completed' ? 'done-text' : ''}">${esc(p.title)}</div>
         <div class="meta">${p.date ? `<span class="small muted">${fmtDate(p.date, pref(), { year: false })}${p.status !== 'completed' && p.date >= t ? ' · ' + countdown(diffDays(t, p.date)) : ''}</span>` : ''}<span class="badge">${L.priority[p.priority || 'medium']}</span>${p.link ? `<span class="small muted">${icon('link', 'sm')}</span>` : ''}</div></div>
-      <div class="row" style="gap:6px;flex-direction:column;align-items:flex-end">${avatar(p.assignee || 'both', 'sm')}<button class="badge ${tone[p.status || 'not_started']}" data-cycle="${p.id}" style="border:0;cursor:pointer">${L.planStatusEn[p.status || 'not_started']}</button></div>
+      <div class="row" style="gap:6px;flex-direction:column;align-items:flex-end">${avatar(p.assignee || 'both', 'sm')}<button class="badge ${tone[p.status || 'not_started']}" data-cycle="${p.id}" style="border:0;cursor:pointer">${L.planStatus[p.status || 'not_started']}</button></div>
     </div>`;
     el.innerHTML = `<div class="page">
-      ${pageHead({ en: 'Our Monthly Plan', ar: 'خطة الشهر', actions: `<button class="btn sm" data-new>${icon('plus', 'sm')} خطة</button>` })}
+      ${pageHead({ en: 'خطتنا الشهرية', ar: 'خطة الشهر', actions: `<button class="btn sm" data-new>${icon('plus', 'sm')} خطة</button>` })}
       <div class="card" style="margin-bottom:14px"><div class="cal-head" style="margin:0"><a class="icon-btn plain" href="#/plans/${addMonths(mk, -1)}" aria-label="الشهر السابق">${icon('chevR')}</a>
-        <div class="t"><b>${mName(mk)}</b><span class="en" style="font-size:14px">${GREG_MONTHS_EN[Number(mk.slice(5)) - 1]} · ${HIJRI_MONTHS[h1.m - 1]}${h1.m !== h2.m ? ' – ' + HIJRI_MONTHS[h2.m - 1] : ''}</span></div>
+        <div class="t"><b>${mName(mk)}</b><span>${HIJRI_MONTHS[h1.m - 1]}${h1.m !== h2.m ? ' – ' + HIJRI_MONTHS[h2.m - 1] : ''}</span></div>
         <a class="icon-btn plain" href="#/plans/${addMonths(mk, 1)}" aria-label="الشهر التالي">${icon('chevL')}</a></div>
         ${plans.length ? `<div class="row between small" style="margin-top:12px"><span>${done} من ${plans.length} مكتملة</span><span class="muted">${Math.round((done / plans.length) * 100)}%</span></div><div class="progress" style="margin-top:6px"><i style="width:${(done / plans.length) * 100}%"></i></div>` : ''}
       </div>
       ${groups.length ? groups.map(([s, l]) => `<div class="section-title"><h2>${L.planStatus[s]}</h2><span class="en">${L.planStatusEn[s]} · ${l.length}</span></div>${l.map(card).join('')}`).join('')
-        : empty(`${GREG_MONTHS_EN[Number(mk.slice(5)) - 1]} is a blank page`, 'لا توجد خطط لهذا الشهر بعد — زيارة مطعم، هدية، موعد، مكان جديد…', `<br><button class="btn sm" data-new>${icon('plus', 'sm')} أضف أول خطة</button>`)}
-      ${months.filter((m) => m !== mk).length ? `<div class="section-title"><h2>أشهر أخرى</h2><span class="en">Archive</span></div><div class="chips" style="flex-wrap:wrap">${months.filter((m) => m !== mk).map((m) => { const ps = all('plans').filter((p) => p.month === m); return `<a class="chip" href="#/plans/${m}">${mName(m)} · ${ps.filter((p) => p.status === 'completed').length}/${ps.length}</a>`; }).join('')}</div>` : ''}
+        : empty('صفحة بيضاء', 'لا توجد خطط لهذا الشهر بعد — زيارة مطعم، هدية، موعد، مكان جديد…', `<br><button class="btn sm" data-new>${icon('plus', 'sm')} أضف أول خطة</button>`)}
+      ${months.filter((m) => m !== mk).length ? `<div class="section-title"><h2>أشهر أخرى</h2><span class="en">الأرشيف</span></div><div class="chips" style="flex-wrap:wrap">${months.filter((m) => m !== mk).map((m) => { const ps = all('plans').filter((p) => p.month === m); return `<a class="chip" href="#/plans/${m}">${mName(m)} · ${ps.filter((p) => p.status === 'completed').length}/${ps.length}</a>`; }).join('')}</div>` : ''}
     </div>`;
     el.onclick = async (e) => {
       const q = (s) => e.target.closest(s); let b;

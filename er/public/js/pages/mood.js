@@ -11,7 +11,7 @@ export function openMoodForm(date = null) {
   const d = date || today();
   const existing = all('moods').find((m) => m.created_by === store.me.id && m.date === d);
   openForm({
-    title: d === today() ? 'كيف حالك اليوم؟' : `مزاجك يوم ${fmtGreg(d, { year: false })}`, en: 'How Are We Today?',
+    title: d === today() ? 'كيف حالك اليوم؟' : `مزاجك يوم ${fmtGreg(d, { year: false })}`, en: 'كيف حالنا اليوم؟',
     values: { energy: 3, ...(existing || {}), date: d },
     fields: [
       { k: 'mood', label: 'المزاج', type: 'seg', required: true, options: Object.entries(L.moods).map(([v, [e, l]]) => ({ v, l: `${e} ${l}` })) },
@@ -58,13 +58,13 @@ export default {
     }
     const recent = moods.filter((m) => m.date < t).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 14);
     el.innerHTML = `<div class="page">
-      ${pageHead({ en: 'How Are We Today?', ar: 'مزاجنا', back: '#/more' })}
+      ${pageHead({ en: 'كيف حالنا اليوم؟', ar: 'مزاجنا', back: '#/more' })}
       <div class="grid2">${card(me)}${card(p) || `<div class="card soft small muted">ادعُ الطرف الآخر من الإعدادات ليشارككم مزاجه</div>`}</div>
       <p class="tiny muted center" style="margin:10px 0 0">تسجيل المزاج اختياري تمامًا 🤍</p>
-      <div class="section-title"><h2>تقويم المزاج</h2><span class="en">Mood Calendar</span></div>
+      <div class="section-title"><h2>تقويم المزاج</h2><span class="en">شهريًا</span></div>
       <div class="card mcal" style="padding:12px"><div class="cal-head"><button class="icon-btn plain" data-m="-1">${icon('chevR')}</button><div class="t"><b>${GREG_MONTHS[mo - 1]} ${y}</b><span>${me.letter} ${p ? '· ' + p.letter : ''}</span></div><button class="icon-btn plain" data-m="1" ${st.month >= monthKey(t) ? 'disabled' : ''}>${icon('chevL')}</button></div>
       <div class="cal-grid">${grid}</div></div>
-      ${recent.length ? `<div class="section-title"><h2>الأيام السابقة</h2><span class="en">History</span></div><div class="card">${recent.map((m) => `<div class="item"><span style="font-size:24px">${L.moods[m.mood]?.[0] || ''}</span><div class="grow"><div class="title">${esc(person(m.created_by)?.name || '')} · ${esc(L.moods[m.mood]?.[1] || '')}</div><div class="sub">${fmtGreg(m.date, { weekday: true })}${m.message ? ' — ' + esc(m.message) : ''}</div></div>${avatar(m.created_by, 'sm')}</div>`).join('')}</div>` : ''}
+      ${recent.length ? `<div class="section-title"><h2>الأيام السابقة</h2><span class="en">السجل</span></div><div class="card">${recent.map((m) => `<div class="item"><span style="font-size:24px">${L.moods[m.mood]?.[0] || ''}</span><div class="grow"><div class="title">${esc(person(m.created_by)?.name || '')} · ${esc(L.moods[m.mood]?.[1] || '')}</div><div class="sub">${fmtGreg(m.date, { weekday: true })}${m.message ? ' — ' + esc(m.message) : ''}</div></div>${avatar(m.created_by, 'sm')}</div>`).join('')}</div>` : ''}
     </div>`;
     el.onclick = (e) => {
       const q = (s) => e.target.closest(s); let b;

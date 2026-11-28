@@ -22,7 +22,7 @@ function loadLeaflet() {
 export function placeSheet(p) {
   if (!p) return;
   openSheet({
-    title: p.name, en: L.placeCatsEn[p.category] || 'Place',
+    title: p.name, en: L.placeCats[p.category] || 'مكان',
     body: `${p.image_id ? img(p.image_id, 'cover') : ''}
       <div class="row between" style="margin-top:12px"><div>${stars(p.rating || 0)} <span class="muted small">${price(p.price)}</span></div><span class="badge ${p.visited ? 'ok' : 'rose'}">${p.visited ? 'زرناه ✓' : 'نريد تجربته'}</span></div>
       <dl class="kv" style="margin-top:12px">${p.location ? `<dt>الموقع</dt><dd>${esc(p.location)}</dd>` : ''}${p.cuisine ? `<dt>النوع</dt><dd>${esc(p.cuisine)}</dd>` : ''}${p.visit_date ? `<dt>زيارتنا</dt><dd>${fmtGreg(p.visit_date)}</dd>` : ''}${p.to_try ? `<dt>نحب نجرب</dt><dd>${esc(p.to_try)}</dd>` : ''}${p.notes ? `<dt>ملاحظات</dt><dd>${esc(p.notes)}</dd>` : ''}</dl>
@@ -50,12 +50,12 @@ export default {
     const row = (p) => `<div class="item" data-open="${p.id}" style="cursor:pointer">${p.image_id ? img(p.image_id, 'thumb') : `<span class="thumb">${icon(L.placeIcon[p.category] || 'pin')}</span>`}<div class="grow" style="min-width:0"><div class="title ellipsis">${esc(p.name)} ${p.favorite ? '★' : ''}</div><div class="sub ellipsis">${esc(L.placeCats[p.category] || '')}${p.cuisine ? ' · ' + esc(p.cuisine) : ''}${p.location ? ' · ' + esc(p.location) : ''}</div></div><div class="small muted">${price(p.price)}</div></div>`;
     const mapped = items.filter((p) => p.lat && p.lng);
     el.innerHTML = `<div class="page">
-      ${pageHead({ en: 'Places We Love', ar: 'أماكننا', back: '#/more', actions: `<button class="btn sm" data-new>${icon('plus', 'sm')} مكان</button>` })}
+      ${pageHead({ en: 'أماكن نحبها', ar: 'أماكننا', back: '#/more', actions: `<button class="btn sm" data-new>${icon('plus', 'sm')} مكان</button>` })}
       <div class="tabs"><button data-tab="try" class="${st.tab === 'try' ? 'on' : ''}">نريد تجربتها · ${counts.try}</button><button data-tab="visited" class="${st.tab === 'visited' ? 'on' : ''}">زرناها · ${counts.visited}</button><button data-tab="all" class="${st.tab === 'all' ? 'on' : ''}">الكل</button></div>
       <div class="chips"><button class="chip ${st.cat === 'all' ? 'on' : ''}" data-cat="all">الكل</button>${Object.entries(L.placeCats).map(([k, l]) => `<button class="chip ${st.cat === k ? 'on' : ''}" data-cat="${k}">${icon(L.placeIcon[k], 'sm')} ${l}</button>`).join('')}</div>
-      <div class="row between" style="margin-bottom:10px"><span class="en muted" style="font-size:15px">${st.tab === 'try' ? 'Places We Want to Try' : st.tab === 'visited' ? 'Been there together' : 'All places'}</span>
-        <div class="row" style="gap:4px">${[['cards', 'grid'], ['list', 'list'], ['map', 'map']].map(([v, ic]) => `<button class="icon-btn ${st.view === v ? '' : 'plain'}" data-view="${v}" aria-label="${v}">${icon(ic, 'sm')}</button>`).join('')}</div></div>
-      ${!items.length ? empty('Somewhere new', 'أضيفوا المطاعم والكافيهات والأماكن التي تحبونها أو تخططون لزيارتها', `<br><button class="btn sm" data-new>${icon('plus', 'sm')} إضافة مكان</button>`)
+      <div class="row between" style="margin-bottom:10px"><span class="en muted" style="font-size:13px">${st.tab === 'try' ? 'أماكن نريد تجربتها' : st.tab === 'visited' ? 'زرناها سوا' : 'كل الأماكن'}</span>
+        <div class="row" style="gap:4px">${[['cards', 'grid'], ['list', 'list'], ['map', 'map']].map(([v, ic]) => `<button class="icon-btn ${st.view === v ? '' : 'plain'}" data-view="${v}" aria-label="${{ cards: 'بطاقات', list: 'قائمة', map: 'خريطة' }[v]}">${icon(ic, 'sm')}</button>`).join('')}</div></div>
+      ${!items.length ? empty('مكان جديد', 'أضيفوا المطاعم والكافيهات والأماكن التي تحبونها أو تخططون لزيارتها', `<br><button class="btn sm" data-new>${icon('plus', 'sm')} إضافة مكان</button>`)
         : st.view === 'cards' ? `<div class="pcards">${items.map(card).join('')}</div>`
           : st.view === 'list' ? `<div class="card">${items.map(row).join('')}</div>`
             : `<div class="map" id="map"></div>${mapped.length < items.length ? `<p class="tiny muted">${items.length - mapped.length} مكان بدون موقع — أضف رابط Google Maps ليظهر على الخريطة</p>` : ''}`}
@@ -64,7 +64,8 @@ export default {
       loadLeaflet().then((Lf) => {
         const box = el.querySelector('#map'); if (!box) return;
         const dark = document.documentElement.dataset.theme === 'dark';
-        const map = Lf.map(box, { zoomControl: true, attributionControl: true });
+        const map = Lf.map(box, { zoomControl: false, attributionControl: true });
+        Lf.control.zoom({ position: 'topleft', zoomInTitle: 'تكبير', zoomOutTitle: 'تصغير' }).addTo(map);
         Lf.tileLayer(`https://{s}.basemaps.cartocdn.com/${dark ? 'dark_all' : 'light_all'}/{z}/{x}/{y}{r}.png`, { maxZoom: 19, attribution: '© OpenStreetMap © CARTO' }).addTo(map);
         const pts = [];
         for (const p of mapped) {

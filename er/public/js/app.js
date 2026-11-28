@@ -3,17 +3,19 @@ import { get, setUnauthorizedHandler } from './api.js';
 import { bootstrap, loadCache, onChange, onRemoteEvent, startSync, stopSync, store, clearCache, person } from './store.js';
 import { icon, toast, closeAllSheets, sheetOpen, esc } from './ui.js';
 import { quickAdd } from './editors.js';
+import { setNumerals } from './numerals.js';
+import { startSinceTicker } from './since.js';
 
 const ROUTES = [
   ['', 'home'], ['calendar', 'calendar'], ['calendar/:date', 'calendar'], ['tasks', 'tasks'], ['tasks/:id', 'task'],
   ['plans', 'plans'], ['plans/:month', 'plans'], ['more', 'more'], ['dates', 'dates'], ['mood', 'mood'],
   ['places', 'places'], ['bucket', 'bucket'], ['trips', 'trips'], ['trips/:id', 'trip'], ['honeymoon', 'honeymoon'],
   ['shopping', 'shopping'], ['expenses', 'expenses'], ['notes', 'notes'], ['cycle', 'cycle'], ['settings', 'settings'],
-  ['notifications', 'notifications'],
+  ['notifications', 'notifications'], ['since', 'since'],
 ];
 const AUTH_ROUTES = ['login', 'setup', 'join/:token', 'reset/:token', 'recover'];
-const NAV = [['', 'home', 'Home', 'الرئيسية'], ['calendar', 'calendar', 'Calendar', 'التقويم'], ['tasks', 'tasks', 'Tasks', 'المهام'], ['plans', 'plans', 'Plans', 'الخطط'], ['more', 'more', 'More', 'المزيد']];
-const MORE_SECTIONS = new Set(['dates', 'mood', 'places', 'bucket', 'trips', 'trip', 'honeymoon', 'shopping', 'expenses', 'notes', 'cycle', 'settings', 'notifications', 'more']);
+const NAV = [['', 'home', 'الرئيسية', 'الرئيسية'], ['calendar', 'calendar', 'التقويم', 'التقويم'], ['tasks', 'tasks', 'المهام', 'المهام'], ['plans', 'plans', 'الخطط', 'الخطط'], ['more', 'more', 'المزيد', 'المزيد']];
+const MORE_SECTIONS = new Set(['since', 'dates', 'mood', 'places', 'bucket', 'trips', 'trip', 'honeymoon', 'shopping', 'expenses', 'notes', 'cycle', 'settings', 'notifications', 'more']);
 
 function match(hash, routes) {
   const path = hash.replace(/^#\/?/, '').split('?')[0].replace(/\/$/, '');
@@ -44,14 +46,14 @@ function shell() {
 function setNav(name) {
   const key = MORE_SECTIONS.has(name) ? 'more' : name === 'task' ? 'tasks' : name;
   document.querySelectorAll('[data-nav]').forEach((a) => a.classList.toggle('on', a.dataset.nav === key));
-  document.getElementById('fab')?.classList.toggle('hidden', ['settings', 'cycle', 'notifications', 'shopping', 'more'].includes(name));
+  document.getElementById('fab')?.classList.toggle('hidden', ['settings', 'cycle', 'notifications', 'shopping', 'more', 'since'].includes(name));
 }
 
 async function render(full = true) {
   if (!current || !pageEl) return;
   const mod = await loadPage(current.name);
   try { await mod.render(pageEl, current.params, { full }); }
-  catch (e) { console.error(e); pageEl.innerHTML = `<div class="page"><div class="empty"><span class="en">Oops</span>${esc(e.message || 'حدث خطأ')}</div></div>`; }
+  catch (e) { console.error(e); pageEl.innerHTML = `<div class="page"><div class="empty"><span class="en">عذرًا</span>${esc(e.message || 'حدث خطأ')}</div></div>`; }
 }
 
 async function route() {
@@ -92,6 +94,7 @@ onRemoteEvent((events) => {
 });
 
 export function applyTheme() {
+  if (store.me?.settings?.numerals) setNumerals(store.me.settings.numerals);
   const t = store.me?.settings?.theme || localStorage.getItem('er-theme') || 'auto';
   try { localStorage.setItem('er-theme', t); } catch { /* ignore */ }
   const dark = t === 'dark' || (t === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
@@ -137,6 +140,7 @@ async function start() {
   }
 }
 start();
+startSinceTicker();
 
 if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && sheetOpen()) history.back(); });

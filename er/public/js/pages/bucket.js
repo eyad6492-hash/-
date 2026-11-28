@@ -10,7 +10,7 @@ const st = { s: 'wishlist' };
 
 function toCalendar(b) {
   openForm({
-    title: 'تحويل إلى موعد', en: 'Make it happen',
+    title: 'تحويل إلى موعد', en: 'لنحققها',
     values: { title: b.title, date: b.suggested_date || today(), assignee: 'both', remind: '1' },
     fields: [{ k: 'title', label: 'العنوان', required: true }, { type: 'pair', fields: [{ k: 'date', label: 'التاريخ', type: 'date', required: true }, { k: 'time', label: 'الوقت', type: 'time' }] }, { k: 'notes', label: 'ملاحظات', type: 'textarea', rows: 2 }, { k: 'remind', type: 'remind' }],
     submit: 'إضافة للتقويم',
@@ -25,7 +25,7 @@ function toCalendar(b) {
 function view(b) {
   const ev = b.event_id && byId('events', b.event_id);
   openSheet({
-    title: b.title, en: L.bucketStatusEn[b.status || 'wishlist'],
+    title: b.title, en: L.bucketStatus[b.status || 'wishlist'],
     body: `${b.image_id ? img(b.image_id, 'cover') + '<div style="height:12px"></div>' : ''}
       ${b.description ? `<p style="white-space:pre-wrap;margin-top:0">${esc(b.description)}</p>` : ''}
       <dl class="kv">${b.cost ? `<dt>التكلفة المتوقعة</dt><dd>${money(b.cost)}</dd>` : ''}${b.suggested_date ? `<dt>التاريخ المقترح</dt><dd>${fmtGreg(b.suggested_date, { weekday: true })}</dd>` : ''}<dt>اقترحه</dt><dd>${esc(person(b.created_by)?.name || '')}</dd>${ev ? `<dt>في التقويم</dt><dd><a class="link" href="#/calendar/${ev.date}">${fmtGreg(ev.date)}</a></dd>` : ''}${b.url ? `<dt>الرابط</dt><dd><a class="link" href="${esc(b.url)}" target="_blank" rel="noopener">فتح الرابط</a></dd>` : ''}</dl>`,
@@ -45,10 +45,10 @@ export default {
     const list = items.filter((b) => (b.status || 'wishlist') === st.s).sort((a, b) => (a.suggested_date || '9').localeCompare(b.suggested_date || '9') || b.created_at.localeCompare(a.created_at));
     const cnt = (s) => items.filter((b) => (b.status || 'wishlist') === s).length;
     el.innerHTML = `<div class="page">
-      ${pageHead({ en: 'Our Bucket List', ar: 'أشياء نريد تجربتها سوا', back: '#/more', actions: `<button class="btn sm" data-new>${icon('plus', 'sm')} إضافة</button>` })}
+      ${pageHead({ en: 'أحلامنا الصغيرة', ar: 'أشياء نريد تجربتها سوا', back: '#/more', actions: `<button class="btn sm" data-new>${icon('plus', 'sm')} إضافة</button>` })}
       <div class="tabs">${Object.entries(L.bucketStatusEn).map(([k, l]) => `<button data-s="${k}" class="${st.s === k ? 'on' : ''}">${l} · ${cnt(k)}</button>`).join('')}</div>
       ${list.length ? `<div class="pcards">${list.map((b) => `<div class="pcard" data-open="${b.id}"><div class="img">${b.image_id ? img(b.image_id) : icon('sparkle', 'lg')}${b.status === 'done' ? '<span class="badge">✓</span>' : ''}</div><div class="body"><div class="title">${esc(b.title)}</div><div class="small muted">${b.suggested_date ? fmtGreg(b.suggested_date, { year: false }) : ''}${b.cost ? ' · ' + money(b.cost) : ''}</div><div class="tiny muted">${esc(person(b.created_by)?.name || '')}</div></div></div>`).join('')}</div>`
-        : empty(st.s === 'done' ? 'Memories made' : 'Dream together', st.s === 'done' ? 'هنا ستظهر الأشياء التي جربناها' : 'زيارة مدينة، حضور فعالية، تجربة نشاط جديد…', st.s !== 'done' ? `<br><button class="btn sm" data-new>${icon('plus', 'sm')} أضف أمنية</button>` : '')}
+        : empty(st.s === 'done' ? 'ذكريات صنعناها' : 'لنحلم سوا', st.s === 'done' ? 'هنا ستظهر الأشياء التي جربناها' : 'زيارة مدينة، حضور فعالية، تجربة نشاط جديد…', st.s !== 'done' ? `<br><button class="btn sm" data-new>${icon('plus', 'sm')} أضف أمنية</button>` : '')}
     </div>`;
     el.onclick = (e) => {
       const q = (s) => e.target.closest(s); let b;

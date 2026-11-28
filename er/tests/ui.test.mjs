@@ -79,9 +79,32 @@ async function main() {
   });
   await step('الدورة: إياد لا يرى بيانات روان', async () => { await e.goto(BASE + '/#/cycle'); await e.waitForSelector('text=هذا القسم خاص'); });
 
-  const routes = ['', 'calendar', 'tasks', 'plans', 'more', 'dates', 'mood', 'places', 'bucket', 'trips', 'honeymoon', 'shopping', 'expenses', 'notes', 'settings', 'notifications'];
+  await step('منذ أن عرفنا بعض: إدخال التاريخ والوقت وعداد مباشر', async () => {
+    await e.goto(BASE + '/#/settings'); await e.click('[data-act=since]'); await e.waitForSelector('.sheet [data-k="date"]');
+    await e.fill('.sheet [data-k="date"]', '2023-06-16'); await e.fill('.sheet [data-k="time"]', '15:36:25'); await fill(e, 'note', 'أول مرة التقينا في المقهى'); await save(e);
+    await e.goto(BASE + '/#/since'); await e.waitForSelector('.since-hero [data-u="s"]');
+    const a = await e.textContent('.since-hero [data-u="s"]'); await e.waitForTimeout(2100); const b = await e.textContent('.since-hero [data-u="s"]');
+    if (a === b) throw new Error('counter is not ticking'); await shot(e, '09-since');
+    await r.goto(BASE + '/#/'); await r.waitForSelector('.since-card [data-u="s"]', { timeout: 12000 }); await shot(r, '09-since-home-rawan');
+  });
+  await step('الأرقام العربية من الإعدادات', async () => {
+    await e.goto(BASE + '/#/settings'); await e.click('[data-set=numerals][data-v=arab]'); await e.waitForTimeout(300);
+    await e.goto(BASE + '/#/since'); await e.waitForSelector('.since-hero'); await e.waitForTimeout(1200);
+    const txt = await e.textContent('.since-hero'); if (/[0-9]/.test(txt) || !/[٠-٩]/.test(txt)) throw new Error('digits not Arabic: ' + txt.slice(0, 80));
+    await shot(e, '09-since-arabic-digits');
+    await e.goto(BASE + '/#/calendar'); await e.waitForSelector('.cal-grid'); await shot(e, '09-cal-arabic-digits');
+    await e.goto(BASE + '/#/settings'); await e.click('[data-set=numerals][data-v=latn]'); await e.waitForTimeout(300);
+  });
+
+  const routes = ['since', '', 'calendar', 'tasks', 'plans', 'more', 'dates', 'mood', 'places', 'bucket', 'trips', 'honeymoon', 'shopping', 'expenses', 'notes', 'settings', 'notifications'];
   await step('كل الصفحات تعمل (إياد)', async () => {
-    for (const [i, rt] of routes.entries()) { await e.goto(`${BASE}/#/${rt}`); await e.waitForSelector('.page-head, .greet', { timeout: 8000 }); await e.waitForTimeout(150); await shot(e, `10-${String(i).padStart(2, '0')}-${rt || 'home'}`); }
+    const english = [];
+    for (const [i, rt] of routes.entries()) {
+      await e.goto(`${BASE}/#/${rt}`); await e.waitForSelector('.page-head, .greet', { timeout: 8000 }); await e.waitForTimeout(150); await shot(e, `10-${String(i).padStart(2, '0')}-${rt || 'home'}`);
+      const words = await e.evaluate(() => { const out = []; const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT); for (let n = w.nextNode(); n; n = w.nextNode()) { if (n.parentElement.closest('[dir=ltr], .code-box, .leaflet-control-attribution, script, style, .logo')) continue; const m = n.data.match(/[A-Za-z]{2,}/g); if (m) out.push(...m.filter((x) => !/^(E|R|ER)$/.test(x))); } return out; });
+      if (words.length) english.push(`${rt || 'home'}: ${[...new Set(words)].join(' ')}`);
+    }
+    if (english.length) throw new Error('English words in UI → ' + english.join(' | '));
   });
   await step('التقويم: عرض الأسبوع واليوم والهجري والمحول', async () => {
     await e.goto(BASE + '/#/calendar'); await e.click('[data-basis=h]'); await shot(e, '11-cal-hijri'); await e.click('[data-view=week]'); await e.click('[data-view=day]'); await e.click('[data-view=month]'); await e.click('[data-conv]'); await e.waitForSelector('#gOut b'); await e.keyboard.press('Escape');

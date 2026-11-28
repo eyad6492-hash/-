@@ -14,9 +14,9 @@ export default {
       if (items.some((n) => !n.read)) post('/api/notifications/read', {}).then(() => { store.unread = 0; syncNow(); }).catch(() => {});
     }
     el.innerHTML = `<div class="page">
-      ${pageHead({ en: 'Notifications', ar: 'الإشعارات', back: '#/', actions: items.length ? `<button class="btn sm ghost" data-clear>مسح الكل</button>` : '' })}
+      ${pageHead({ en: 'تنبيهاتنا', ar: 'الإشعارات', back: '#/', actions: items.length ? `<button class="btn sm ghost" data-clear>مسح الكل</button>` : '' })}
       ${items.length ? `<div class="card">${items.map((n) => `<a class="item" href="${esc(n.link || '#/')}"><span class="ic-box ${n.read ? '' : 'rose'}">${icon(IC[n.kind] || 'bell')}</span><div class="grow" style="min-width:0"><div class="title" style="${n.read ? '' : 'font-weight:600'}">${esc(n.title)}</div>${n.body ? `<div class="sub">${esc(n.body)}</div>` : ''}<div class="tiny muted">${fmtGreg(n.created_at.slice(0, 10), { year: false })} · ${new Date(n.created_at).toLocaleTimeString('ar-SA-u-nu-latn', { hour: 'numeric', minute: '2-digit' })}</div></div>${n.actor ? avatar(n.actor, 'sm') : ''}</a>`).join('')}</div>`
-        : empty('All caught up', 'لا توجد إشعارات')}
+        : empty('لا جديد', 'لا توجد إشعارات')}
       <p class="tiny muted center" style="margin-top:14px">لتصلك الإشعارات على الجوال حتى والتطبيق مغلق: الإعدادات ← الإشعارات ← تفعيل على هذا الجهاز</p>
     </div>`;
     el.onclick = async (e) => {

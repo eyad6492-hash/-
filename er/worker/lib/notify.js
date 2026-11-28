@@ -6,8 +6,9 @@ import { parseSettings } from './session.js';
 /** kindGroup: a key of settings.notify (tasks, notes, dates, events, trips, plans, shopping, mood). */
 export async function notify(ctx, user, { kind, group, title, body = '', link = '#/', actor = null }) {
   if (!user) return;
-  const prefs = parseSettings(user.settings).notify;
-  if (group && prefs[group] === false) return;
+  const st = parseSettings(user.settings);
+  if (group && st.notify[group] === false) return;
+  if (st.numerals === 'arab') { const ar = (x) => String(x || '').replace(/[0-9]/g, (d) => '٠١٢٣٤٥٦٧٨٩'[d]); title = ar(title); body = ar(body); }
   await ctx.env.DB.prepare('INSERT INTO notifications (id, user_id, kind, title, body, link, actor, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
     .bind(newId('n_'), user.id, kind, title.slice(0, 200), String(body || '').slice(0, 500), link, actor, nowISO()).run();
   const job = pushTo(ctx, user.id, { title, body, url: '/' + link, tag: kind });

@@ -25,6 +25,7 @@ function mergeSettings(cur, patch) {
   if (typeof patch.tz === 'string' && patch.tz.length < 60) { try { new Intl.DateTimeFormat('en', { timeZone: patch.tz }); s.tz = patch.tz; } catch { /* ignore */ } }
   if (Number.isInteger(patch.remind_hour) && patch.remind_hour >= 0 && patch.remind_hour <= 23) s.remind_hour = patch.remind_hour;
   if ([0, 1, 6].includes(patch.week_start)) s.week_start = patch.week_start;
+  if (['latn', 'arab'].includes(patch.numerals)) s.numerals = patch.numerals;
   if (patch.notify && typeof patch.notify === 'object') for (const k of Object.keys(s.notify)) if (k in patch.notify) s.notify[k] = !!patch.notify[k];
   if (patch.cycle && typeof patch.cycle === 'object') {
     for (const k of ['enabled', 'show_home', 'fertility', 'hide']) if (k in patch.cycle) s.cycle[k] = !!patch.cycle[k];
@@ -77,6 +78,19 @@ export const miscRoutes = {
     if (b.currency !== undefined) {
       const c = str(b.currency, 8) || 'ر.س';
       await ctx.env.DB.prepare('INSERT INTO space_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').bind('currency', JSON.stringify(c)).run();
+    }
+    if (b.since !== undefined) {
+      // "منذ أن عرفنا بعض" — shared by both, stored once for the space
+      let v = null;
+      if (b.since) {
+        const at = String(b.since.at || '');
+        if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(at) || Number.isNaN(Date.parse(at.length === 16 ? at + ':00Z' : at + 'Z'))) throw bad('التاريخ أو الوقت غير صحيح');
+        let tz = String(b.since.tz || parseSettings(ctx.user.settings).tz);
+        try { new Intl.DateTimeFormat('en', { timeZone: tz }); } catch { tz = 'Asia/Riyadh'; }
+        const img = b.since.image_id && /^f_[a-f0-9]+$/.test(b.since.image_id) ? b.since.image_id : null;
+        v = { at, tz, title: str(b.since.title, 80), note: str(b.since.note, 3000), image_id: img, show_home: b.since.show_home !== false, updated_by: ctx.user.id, updated_at: nowISO() };
+      }
+      await ctx.env.DB.prepare('INSERT INTO space_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').bind('since', JSON.stringify(v)).run();
     }
     await logChange(ctx, 'space', 'space', 'update');
     return json({ ok: true });

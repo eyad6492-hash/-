@@ -53,11 +53,11 @@ export default {
         : (a, b) => (a.due_date || '9999').localeCompare(b.due_date || '9999') || PRIO[a.priority || 'medium'] - PRIO[b.priority || 'medium']);
 
     el.innerHTML = `<div class="page">
-      ${pageHead({ en: 'Our Tasks', ar: 'مهامنا', actions: `<button class="btn sm" data-new>${icon('plus', 'sm')} مهمة</button>` })}
+      ${pageHead({ en: 'مهامنا المشتركة', ar: 'مهامنا', actions: `<button class="btn sm" data-new>${icon('plus', 'sm')} مهمة</button>` })}
       <div class="stats3" style="margin-bottom:14px"><div class="stat"><b class="num">${counts.mine}</b><span>لي</span></div><div class="stat"><b class="num">${counts.partner}</b><span>${esc(p?.name || 'الطرف الآخر')}</span></div><div class="stat"><b class="num ${counts.late ? 'prio-high' : ''}">${counts.late}</b><span>متأخرة</span></div></div>
       <div class="chips">${Object.entries(F).map(([k, [l]]) => `<button class="chip ${st.f === k ? 'on' : ''}" data-f="${k}">${esc(l)} <span class="tiny" style="opacity:.7">${counts[k]}</span></button>`).join('')}</div>
       ${st.f !== 'done' ? `<div class="row between" style="margin-bottom:8px"><span class="small muted">${list.length} مهمة</span><button class="link" style="border:0;background:none;cursor:pointer" data-sort>${st.sort === 'due' ? 'ترتيب: الموعد' : 'ترتيب: الأولوية'} ${icon('chevD', 'sm')}</button></div>` : ''}
-      ${list.length ? list.map((x) => taskCard(x, t)).join('') : empty('All clear', st.f === 'done' ? 'لا توجد مهام منجزة بعد' : 'لا توجد مهام هنا ✨', `<br><button class="btn sm" data-new>${icon('plus', 'sm')} إضافة مهمة</button>`)}
+      ${list.length ? list.map((x) => taskCard(x, t)).join('') : empty('كل شيء منجز', st.f === 'done' ? 'لا توجد مهام منجزة بعد' : 'لا توجد مهام هنا ✨', `<br><button class="btn sm" data-new>${icon('plus', 'sm')} إضافة مهمة</button>`)}
     </div>`;
     el.onclick = (e) => {
       const q = (s) => e.target.closest(s); let b;

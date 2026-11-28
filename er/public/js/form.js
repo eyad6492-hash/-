@@ -52,7 +52,7 @@ function fieldHtml(f, v, vals) {
     }
     case 'info': return `<div class="notice rose" style="margin-bottom:14px">${f.html}</div>`;
     case 'pair': return `<div class="inline-fields">${f.fields.map((x) => fieldHtml(x, vals[x.k], vals)).join('')}</div>`;
-    default: return `<label class="field">${lab}<input type="${f.type || 'text'}" data-k="${f.k}" value="${esc(val)}"${ph}${f.type === 'number' ? ' inputmode="decimal" step="any"' : ''}${f.maxlength ? ` maxlength="${f.maxlength}"` : ''}${f.autocomplete ? ` autocomplete="${f.autocomplete}"` : ''}${f.dir ? ` dir="${f.dir}"` : ''}>${hint}</label>`;
+    default: return `<label class="field">${lab}<input type="${f.type || 'text'}" data-k="${f.k}" value="${esc(val)}"${ph}${f.type === 'number' ? ' inputmode="decimal" step="any"' : ''}${f.maxlength ? ` maxlength="${f.maxlength}"` : ''}${f.autocomplete ? ` autocomplete="${f.autocomplete}"` : ''}${f.dir ? ` dir="${f.dir}"` : ''}${f.step ? ` step="${f.step}"` : ''}>${hint}</label>`;
   }
 }
 const imgCell = (id, multi = false) => (id ? `<div class="ph" data-has="${esc(id)}"><img src="${fileUrl(id)}" alt=""><button type="button" class="x" data-rm="${esc(id)}" data-multi="${multi ? 1 : ''}">${icon('x', 'sm')}</button></div>` : `<div class="ph" data-pick>${icon('image')}</div>`);

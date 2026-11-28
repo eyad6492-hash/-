@@ -1,6 +1,6 @@
 // E&R service worker: app shell offline cache + push notifications. API responses are never cached.
 const VERSION = 'er-__BUILD__';
-const SHELL = ['/', '/index.html', '/css/app.css', '/manifest.webmanifest', '/js/boot.js', '/js/app.js', '/js/api.js', '/js/store.js', '/js/ui.js', '/js/form.js', '/js/icons.js', '/js/dates.js', '/js/labels.js', '/js/editors.js', '/js/agenda.js', '/js/cycle-math.js', '/js/push.js', '/fonts/plex-ar-400.woff2', '/fonts/plex-ar-500.woff2', '/fonts/plex-ar-600.woff2', '/fonts/corm-600.woff2', '/fonts/corm-500i.woff2', '/icons/icon-192.png'];
+const SHELL = ['/', '/index.html', '/css/app.css', '/manifest.webmanifest', '/js/boot.js', '/js/app.js', '/js/api.js', '/js/store.js', '/js/ui.js', '/js/form.js', '/js/icons.js', '/js/dates.js', '/js/labels.js', '/js/editors.js', '/js/agenda.js', '/js/cycle-math.js', '/js/push.js', '/js/numerals.js', '/js/since.js', '/js/geo.js', '/fonts/plex-ar-400.woff2', '/fonts/plex-ar-500.woff2', '/fonts/plex-ar-600.woff2', '/fonts/corm-600.woff2', '/fonts/corm-500i.woff2', '/icons/icon-192.png'];
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => { e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener('fetch', (e) => {

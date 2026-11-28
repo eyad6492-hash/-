@@ -73,7 +73,7 @@ export default {
     }
 
     el.innerHTML = `<div class="page">
-      <div class="page-head"><div><div class="kicker">Our Calendar</div><h1>التقويم</h1></div>
+      <div class="page-head"><div><div class="kicker">تقويمنا</div><h1>التقويم</h1></div>
         <div class="row" style="gap:8px"><button class="icon-btn" data-conv aria-label="تحويل التاريخ">${icon('repeat')}</button><button class="btn sm soft" data-today>اليوم</button></div></div>
       <div class="row" style="gap:8px;margin-bottom:12px"><div class="tabs grow" style="margin:0">${[['month', 'شهر'], ['week', 'أسبوع'], ['day', 'يوم']].map(([k, l]) => `<button data-view="${k}" class="${st.view === k ? 'on' : ''}">${l}</button>`).join('')}</div>
         ${st.view === 'month' ? `<div class="tabs" style="margin:0">${[['g', 'ميلادي'], ['h', 'هجري']].map(([k, l]) => `<button data-basis="${k}" class="${st.basis === k ? 'on' : ''}" style="padding:0 10px">${l}</button>`).join('')}</div>` : ''}</div>
@@ -96,7 +96,7 @@ export default {
         const k = await choose('إضافة في ' + fmtGreg(st.sel, { year: false }), [
           { k: 'event', l: 'حدث', icon: 'sparkle', tone: 'rose' }, { k: 'appointment', l: 'موعد', icon: 'clock', tone: 'brown' }, { k: 'trip', l: 'رحلة', icon: 'plane' }, { k: 'task', l: 'مهمة', icon: 'tasks', tone: 'sage' },
           { k: 'date', l: 'مناسبة', icon: 'gift', tone: 'brown' }, { k: 'plan', l: 'خطة', icon: 'plans' }, { k: 'more', l: 'المزيد', icon: 'more' },
-        ], 'Add to Calendar');
+        ], 'إلى التقويم');
         if (k === 'event' || k === 'appointment') editEvent(null, { date: st.sel, type: k });
         else if (k === 'trip') editTrip(null, { start_date: st.sel });
         else if (k === 'task') editTask(null, { due_date: st.sel });
@@ -117,7 +117,7 @@ function converter() {
   const t = today(); const h = toHijri(t);
   const hy = h.y; const years = []; for (let y = hy + 10; y >= hy - 100; y--) years.push(y);
   openSheet({
-    title: 'تحويل التاريخ', en: 'Hijri ⇄ Gregorian',
+    title: 'تحويل التاريخ', en: 'هجري ⇄ ميلادي',
     body: `<label class="field"><span>من الميلادي</span><input type="date" class="input" id="g" value="${t}"></label><div class="card soft" id="gOut"></div>
       <div class="divider"></div>
       <div class="field"><span>من الهجري (أم القرى)</span><div class="inline-fields three"><select class="input" id="hd">${Array.from({ length: 30 }, (_, i) => `<option ${i + 1 === h.d ? 'selected' : ''}>${i + 1}</option>`).join('')}</select><select class="input" id="hm">${HIJRI_MONTHS.map((n, i) => `<option value="${i + 1}" ${i + 1 === h.m ? 'selected' : ''}>${n}</option>`).join('')}</select><select class="input" id="hy">${years.map((y) => `<option ${y === hy ? 'selected' : ''}>${y}</option>`).join('')}</select></div></div><div class="card soft" id="hOut"></div>`,

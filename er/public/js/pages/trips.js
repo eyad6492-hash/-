@@ -24,9 +24,9 @@ export default {
         ${x.budget ? `<div class="progress ${spent > x.budget ? 'over' : ''}" style="margin-top:10px"><i style="width:${Math.min(100, (spent / x.budget) * 100)}%"></i></div><div class="tiny muted" style="margin-top:4px">${money(spent)} من ${money(x.budget)}</div>` : ''}</div></a>`;
     };
     el.innerHTML = `<div class="page">
-      ${pageHead({ en: 'Our Travel Plans', ar: 'رحلاتنا', back: '#/more', actions: `<button class="btn sm" data-new>${icon('plus', 'sm')} رحلة</button>` })}
-      ${up.length ? up.map(card).join('') : empty('Where to next?', 'خططوا لرحلتكم القادمة: الطيران، الفندق، الأماكن، الميزانية وقائمة التجهيز', `<br><button class="btn sm" data-new>${icon('plus', 'sm')} رحلة جديدة</button>`)}
-      ${past.length ? `<div class="section-title"><h2>رحلات سابقة</h2><span class="en">Memories</span></div>${past.map(card).join('')}` : ''}
+      ${pageHead({ en: 'خطط السفر', ar: 'رحلاتنا', back: '#/more', actions: `<button class="btn sm" data-new>${icon('plus', 'sm')} رحلة</button>` })}
+      ${up.length ? up.map(card).join('') : empty('إلى أين بعد ذلك؟', 'خططوا لرحلتكم القادمة: الطيران، الفندق، الأماكن، الميزانية وقائمة التجهيز', `<br><button class="btn sm" data-new>${icon('plus', 'sm')} رحلة جديدة</button>`)}
+      ${past.length ? `<div class="section-title"><h2>رحلات سابقة</h2><span class="en">ذكريات</span></div>${past.map(card).join('')}` : ''}
     </div>`;
     el.onclick = (e) => { if (e.target.closest('[data-new]')) editTrip(); };
   },

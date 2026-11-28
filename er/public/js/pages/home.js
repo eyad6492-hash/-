@@ -8,6 +8,7 @@ import { L } from '../labels.js';
 import { cycleStats } from '../cycle-math.js';
 import { get } from '../api.js';
 import { openMoodForm } from './mood.js';
+import { sinceCard } from './since.js';
 
 let cycleCache = null;
 
@@ -24,14 +25,14 @@ export default {
     if (up.nextDate) {
       const { d, o } = up.nextDate; const n = diffDays(t, o.date);
       hero = `<a class="hero tap" href="#/dates" style="display:block">
-        <div class="row between"><span class="en" style="color:var(--rose-ink);font-size:16px">Next Celebration</span>${icon(L.dateKindIcon[d.kind] || 'sparkle')}</div>
+        <div class="row between"><span class="en" style="color:var(--rose-ink);font-size:14px">المناسبة القادمة</span>${icon(L.dateKindIcon[d.kind] || 'sparkle')}</div>
         <div class="row" style="align-items:flex-end;margin-top:14px;gap:14px">
           <div><div class="big num">${n === 0 ? '✦' : n}</div><div class="unit">${n === 0 ? 'اليوم!' : n === 1 ? 'يوم — غدًا' : n <= 10 ? 'أيام متبقية' : 'يومًا متبقيًا'}</div></div>
           <div class="grow" style="padding-bottom:4px"><div style="font-weight:600;font-size:17px">${esc(d.title)}</div>
           <div class="small" style="color:var(--ink2)">${fmtDate(o.date, p, { weekday: false })}${o.years > 0 && d.cal !== 'h' ? ` · ${o.years === 1 ? 'السنة الأولى' : `${o.years} سنوات`}` : ''}</div></div>
         </div></a>`;
     } else {
-      hero = `<a class="hero tap" href="#/dates" style="display:block"><span class="en" style="color:var(--rose-ink);font-size:16px">Our Important Dates</span><div style="font-weight:600;font-size:17px;margin-top:8px">أضيفوا مناسباتكم المهمة</div><div class="small muted">أعياد الميلاد، الخطوبة، أول لقاء… وسنعدّ الأيام عنكم.</div></a>`;
+      hero = `<a class="hero tap" href="#/dates" style="display:block"><span class="en" style="color:var(--rose-ink);font-size:14px">تواريخنا المهمة</span><div style="font-weight:600;font-size:17px;margin-top:8px">أضيفوا مناسباتكم المهمة</div><div class="small muted">أعياد الميلاد، الخطوبة، أول لقاء… وسنعدّ الأيام عنكم.</div></a>`;
     }
 
     // ---- upcoming events ----
@@ -85,10 +86,10 @@ export default {
     if (cs.enabled && cs.show_home && !cs.has_pin) {
       if (!cycleCache) get('/api/c/cycles').then((r) => { cycleCache = r.items; this.render(el); }).catch(() => { cycleCache = []; });
       const st = cycleCache ? cycleStats(cycleCache, t) : null;
-      if (st?.next) cycleCard = `<a class="card tap" href="#/cycle" style="display:block"><div class="card-head"><span class="en">Cycle</span>${icon('drop', 'sm')}</div><div class="small">${st.inPeriod ? `اليوم ${st.dayOfCycle} من الدورة` : `الدورة المتوقعة ${countdown(st.daysToNext)}`}</div></a>`;
+      if (st?.next) cycleCard = `<a class="card tap" href="#/cycle" style="display:block"><div class="card-head"><span class="en">الدورة</span>${icon('drop', 'sm')}</div><div class="small">${st.inPeriod ? `اليوم ${st.dayOfCycle} من الدورة` : `الدورة المتوقعة ${countdown(st.daysToNext)}`}</div></a>`;
     } else if (store.partner_cycle?.next && !cs.enabled) {
       const pc = store.partner_cycle;
-      cycleCard = `<div class="card soft"><div class="card-head"><span class="en">${esc(partner?.name || '')}’s Cycle</span>${icon('drop', 'sm')}</div><div class="small">${pc.in_period ? 'في فترة الدورة الآن — كن لطيفًا 🤍' : `الموعد المتوقع ${countdown(pc.days_to_next)}`}</div></div>`;
+      cycleCard = `<div class="card soft"><div class="card-head"><span class="en">${esc(partner?.name || '')}—الدورة</span>${icon('drop', 'sm')}</div><div class="small">${pc.in_period ? 'في فترة الدورة الآن — كن لطيفًا 🤍' : `الموعد المتوقع ${countdown(pc.days_to_next)}`}</div></div>`;
     }
 
     el.innerHTML = `<div class="page">
@@ -96,8 +97,9 @@ export default {
         <div class="row" style="gap:8px"><a class="icon-btn" href="#/notifications" aria-label="الإشعارات">${icon('bell')}${store.unread ? `<span class="pill-count">${store.unread > 9 ? '9+' : store.unread}</span>` : ''}</a><a href="#/settings">${avatar(me)}</a></div></div>
       <div class="greet" style="margin:6px 2px 16px"><h1>${greetingFor(hour)}، ${esc(me.name)}</h1>
         <div class="date">${fmtGreg(t, { weekday: true })} · ${fmtHijri(t)}</div></div>
+      ${sinceCard()}
       ${hero}
-      ${ups.length ? `<div class="section-title"><h2>القادم</h2><span class="en">Upcoming Events</span></div><div class="card upc">${ups.join('')}</div>` : ''}
+      ${ups.length ? `<div class="section-title"><h2>القادم</h2><span class="en">الأيام القادمة</span></div><div class="card upc">${ups.join('')}</div>` : ''}
 
       <div class="section-title"><h2>مزاجنا اليوم</h2><a href="#/mood">السجل</a></div>
       <div class="mood-pair">${moodCell(me)}${moodCell(partner)}</div>
@@ -105,7 +107,7 @@ export default {
       <div class="section-title"><h2>${todays.length ? 'مهام اليوم' : 'مهامي'}</h2><a href="#/tasks">الكل${overdue ? ` · <span class="prio-high">${overdue} متأخرة</span>` : ''}</a></div>
       <div class="card">${list.length ? list.map(taskRow).join('') : `<div class="muted small center" style="padding:8px">لا توجد مهام مفتوحة ✨</div>`}</div>
 
-      <div class="section-title"><h2>شهرنا</h2><span class="en">Our Month · ${GREG_MONTHS[Number(mk.slice(5)) - 1]}</span></div>
+      <div class="section-title"><h2>شهرنا</h2><span class="en">${GREG_MONTHS[Number(mk.slice(5)) - 1]}</span></div>
       <a class="card tap" href="#/plans/${mk}" style="display:block">
         <div class="row between small"><span>الخطط ${plansDone}/${plans.length}</span><span class="muted">${plans.length ? Math.round((plansDone / plans.length) * 100) : 0}%</span></div>
         <div class="progress" style="margin:8px 0 14px"><i style="width:${plans.length ? (plansDone / plans.length) * 100 : 0}%"></i></div>
@@ -113,9 +115,9 @@ export default {
       </a>
 
       <div class="grid2" style="margin-top:12px">
-        <a class="card tap" href="#/places" style="display:block"><div class="card-head"><span class="en">Plans</span>${icon('compass', 'sm')}</div>
+        <a class="card tap" href="#/places" style="display:block"><div class="card-head"><span class="en">خططنا</span>${icon('compass', 'sm')}</div>
           ${toTry.length || bucketPlanned.length || trips ? `<div class="small">${toTry.map((x) => `<div class="ellipsis">🍽 ${esc(x.name)}</div>`).join('')}${bucketPlanned.map((x) => `<div class="ellipsis">✦ ${esc(x.title)}</div>`).join('')}${trips ? `<div>✈️ ${trips} ${trips === 1 ? 'رحلة قادمة' : 'رحلات قادمة'}</div>` : ''}</div>` : '<div class="small muted">أماكن نخطط لزيارتها</div>'}</a>
-        <a class="card tap" href="#/expenses" style="display:block"><div class="card-head"><span class="en">Expenses</span>${icon('wallet', 'sm')}</div>
+        <a class="card tap" href="#/expenses" style="display:block"><div class="card-head"><span class="en">المصروفات</span>${icon('wallet', 'sm')}</div>
           <div class="stat"><b class="num" style="font-size:22px">${money(total)}</b><span>هذا الشهر</span></div>
           ${budget ? `<div class="progress ${total > budget ? 'over' : ''}" style="margin-top:8px"><i style="width:${Math.min(100, (total / budget) * 100)}%"></i></div><div class="tiny muted" style="margin-top:4px">${total > budget ? `تجاوز ${money(total - budget)}` : `المتبقي ${money(budget - total)}`}</div>` : ''}</a>
       </div>

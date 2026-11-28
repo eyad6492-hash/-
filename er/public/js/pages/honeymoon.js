@@ -11,7 +11,7 @@ const st = { tab: 'dest', sec: 'flight' };
 
 function editDest(row = null) {
   openForm({
-    title: row ? 'تعديل الوجهة' : 'وجهة مقترحة', en: 'Destination',
+    title: row ? 'تعديل الوجهة' : 'وجهة مقترحة', en: 'وجهة',
     values: row || {},
     fields: [
       { type: 'pair', fields: [{ k: 'name', label: 'الوجهة', required: true, placeholder: 'مثال: المالديف' }, { k: 'country', label: 'الدولة / المنطقة' }] },
@@ -32,7 +32,7 @@ function editDest(row = null) {
 function editHItem(section, row = null) {
   const dests = all('honeymoon');
   openForm({
-    title: row ? 'تعديل' : `إضافة — ${L.honeySections[section]}`, en: L.honeySectionsEn[section],
+    title: row ? 'تعديل' : `إضافة — ${L.honeySections[section]}`, en: 'شهر العسل',
     values: { section, destination_id: dests.find((d) => d.chosen)?.id || '', ...(row || {}) },
     fields: [
       { k: 'title', label: 'العنوان', required: true },
@@ -51,7 +51,7 @@ function editHItem(section, row = null) {
 
 function destSheet(d) {
   openSheet({
-    title: d.name, en: d.chosen ? 'Our final choice ✦' : 'Destination',
+    title: d.name, en: d.chosen ? 'اختيارنا النهائي ✦' : 'وجهة',
     body: `${d.image_id ? img(d.image_id, 'cover') + '<div style="height:12px"></div>' : ''}
       <dl class="kv">${d.country ? `<dt>المنطقة</dt><dd>${esc(d.country)}</dd>` : ''}${d.budget ? `<dt>الميزانية</dt><dd>${money(d.budget)}</dd>` : ''}${d.flight_cost ? `<dt>الطيران</dt><dd>${money(d.flight_cost)}</dd>` : ''}${d.hotel_cost ? `<dt>الفندق</dt><dd>${money(d.hotel_cost)}</dd>` : ''}${d.duration ? `<dt>المدة</dt><dd>${d.duration} أيام</dd>` : ''}${d.best_time ? `<dt>أفضل وقت</dt><dd>${esc(d.best_time)}</dd>` : ''}${d.rating ? `<dt>تقييمنا</dt><dd>${stars(d.rating)}</dd>` : ''}${d.pros ? `<dt>المميزات</dt><dd>${esc(d.pros)}</dd>` : ''}${d.cons ? `<dt>العيوب</dt><dd>${esc(d.cons)}</dd>` : ''}${d.notes ? `<dt>ملاحظات</dt><dd>${esc(d.notes)}</dd>` : ''}</dl>`,
     foot: `${d.chosen ? `<button class="btn rose" data-trip>${icon('plane', 'sm')} ${d.trip_id && byId('trips', d.trip_id) ? 'فتح الرحلة' : 'تحويل إلى رحلة'}</button>` : `<button class="btn" data-choose>${icon('star', 'sm')} اختيارها كوجهة نهائية</button>`}<button class="icon-btn" data-edit>${icon('edit')}</button>`,
@@ -78,11 +78,11 @@ export default {
     let body = '';
     if (st.tab === 'dest') {
       body = dests.length ? `<div class="pcards">${dests.map((d) => `<div class="pcard ${d.chosen ? 'chosen-ring' : ''}" data-dest="${d.id}"><div class="img">${d.image_id ? img(d.image_id) : icon('palm', 'lg')}${d.chosen ? '<span class="badge">✦ اخترناها</span>' : ''}</div><div class="body"><div class="title">${esc(d.name)}</div><div class="small muted">${esc(d.country || '')}${d.budget ? ' · ' + money(d.budget) : ''}</div>${d.rating ? stars(d.rating) : ''}</div></div>`).join('')}</div>`
-        : empty('Dream destinations', 'أضيفوا الوجهات المقترحة ثم قارنوا بينها واختاروا الوجهة النهائية', '');
+        : empty('وجهات نحلم بها', 'أضيفوا الوجهات المقترحة ثم قارنوا بينها واختاروا الوجهة النهائية', '');
       body += `<button class="btn soft block" style="margin-top:12px" data-newdest>${icon('plus', 'sm')} وجهة مقترحة</button>`;
     } else if (st.tab === 'compare') {
       const rows = [['الميزانية', (d) => (d.budget ? money(d.budget) : '—')], ['الطيران', (d) => (d.flight_cost ? money(d.flight_cost) : '—')], ['الفندق', (d) => (d.hotel_cost ? money(d.hotel_cost) : '—')], ['الإجمالي التقريبي', (d) => ((d.flight_cost || 0) + (d.hotel_cost || 0) ? money((d.flight_cost || 0) + (d.hotel_cost || 0)) : '—')], ['المدة', (d) => (d.duration ? `${d.duration} أيام` : '—')], ['أفضل وقت', (d) => esc(d.best_time || '—')], ['التقييم', (d) => (d.rating ? stars(d.rating) : '—')], ['المميزات', (d) => esc(d.pros || '—')], ['العيوب', (d) => esc(d.cons || '—')]];
-      body = dests.length >= 1 ? `<div class="card compare-wrap" style="padding:8px 16px"><table class="compare"><thead><tr><th></th>${dests.map((d) => `<th style="color:var(--ink)">${d.chosen ? '✦ ' : ''}${esc(d.name)}</th>`).join('')}</tr></thead><tbody>${rows.map(([l, f]) => `<tr><th>${l}</th>${dests.map((d) => `<td style="white-space:pre-wrap">${f(d)}</td>`).join('')}</tr>`).join('')}<tr><th></th>${dests.map((d) => `<td>${d.chosen ? '<span class="badge rose">الوجهة النهائية</span>' : `<button class="btn sm soft" data-dest="${d.id}">اختيار</button>`}</td>`).join('')}</tr></tbody></table></div>` : empty('Compare', 'أضيفوا وجهتين أو أكثر للمقارنة', '');
+      body = dests.length >= 1 ? `<div class="card compare-wrap" style="padding:8px 16px"><table class="compare"><thead><tr><th></th>${dests.map((d) => `<th style="color:var(--ink)">${d.chosen ? '✦ ' : ''}${esc(d.name)}</th>`).join('')}</tr></thead><tbody>${rows.map(([l, f]) => `<tr><th>${l}</th>${dests.map((d) => `<td style="white-space:pre-wrap">${f(d)}</td>`).join('')}</tr>`).join('')}<tr><th></th>${dests.map((d) => `<td>${d.chosen ? '<span class="badge rose">الوجهة النهائية</span>' : `<button class="btn sm soft" data-dest="${d.id}">اختيار</button>`}</td>`).join('')}</tr></tbody></table></div>` : empty('المقارنة', 'أضيفوا وجهتين أو أكثر للمقارنة', '');
     } else {
       const list = items.filter((i) => i.section === st.sec).sort((a, b) => (a.date || '9').localeCompare(b.date || '9') || a.created_at.localeCompare(b.created_at));
       const destName = (id) => dests.find((d) => d.id === id)?.name;
@@ -92,8 +92,8 @@ export default {
         <button class="btn soft block" style="margin-top:12px" data-additem>${icon('plus', 'sm')} إضافة — ${L.honeySections[st.sec]}</button>`;
     }
     el.innerHTML = `<div class="page">
-      ${pageHead({ en: 'Our Honeymoon', ar: 'شهر العسل', back: '#/more' })}
-      <div class="hero" style="margin-bottom:14px"><div class="row between"><span class="en" style="color:var(--rose-ink);font-size:17px">${chosen ? 'We’re going to…' : 'Somewhere beautiful'}</span>${icon('palm')}</div>
+      ${pageHead({ en: 'رحلة العمر', ar: 'شهر العسل', back: '#/more' })}
+      <div class="hero" style="margin-bottom:14px"><div class="row between"><span class="en" style="color:var(--rose-ink);font-size:14px">${chosen ? 'وجهتنا…' : 'مكان جميل ينتظرنا'}</span>${icon('palm')}</div>
         <div style="font-size:22px;font-weight:600;margin-top:6px">${chosen ? esc(chosen.name) : 'لم نختر الوجهة بعد'}</div>
         <div class="small" style="color:var(--ink2)">${dests.length} وجهات مقترحة${totalBudget ? ` · مبالغ مسجلة ${money(totalBudget)}` : ''}${chosen?.budget ? ` · الميزانية ${money(chosen.budget)}` : ''}</div>
         ${chosen ? `<button class="btn sm" style="margin-top:12px" data-dest="${chosen.id}">${icon('plane', 'sm')} ${chosen.trip_id && byId('trips', chosen.trip_id) ? 'فتح الرحلة' : 'تحويل إلى رحلة'}</button>` : ''}</div>

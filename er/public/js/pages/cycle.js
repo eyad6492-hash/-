@@ -22,7 +22,7 @@ async function load() {
 
 function editEntry(row, rerender) {
   openForm({
-    title: row ? 'تعديل السجل' : 'تسجيل دورة', en: 'Cycle Log',
+    title: row ? 'تعديل السجل' : 'تسجيل دورة', en: 'سجل الدورة',
     values: { start_date: today(), flow: 'medium', pain: 0, symptoms: [], ...(row || {}) },
     fields: [
       { type: 'pair', fields: [{ k: 'start_date', label: 'أول يوم', type: 'date', required: true }, { k: 'end_date', label: 'آخر يوم', type: 'date', hint: 'اتركه فارغًا إن لم تنتهِ بعد' }] },
@@ -45,7 +45,7 @@ function settingsSheet(rerender) {
   const c = store.me.settings.cycle;
   const tg = (k, label, hint, on) => `<div class="set-row"><div><div style="font-weight:500">${label}</div><div class="tiny muted">${hint}</div></div><label class="toggle"><input type="checkbox" data-t="${k}" ${on ? 'checked' : ''}><i></i></label></div>`;
   openSheet({
-    title: 'خصوصية القسم', en: 'Privacy',
+    title: 'خصوصية القسم', en: 'الخصوصية',
     body: `${tg('show_home', 'إظهار ملخص في الرئيسية', 'لك فقط — لا يظهر للطرف الآخر', c.show_home)}
       ${tg('share', `مشاركة الموعد المتوقع مع ${esc(store.partner?.name || 'الطرف الآخر')}`, 'يرى الموعد التقريبي فقط، بدون أي تفاصيل أو أعراض', c.share === 'prediction')}
       ${tg('fertility', 'عرض فترة الخصوبة التقديرية', 'اختياري — تقدير تقريبي', c.fertility)}
@@ -68,7 +68,7 @@ function settingsSheet(rerender) {
 }
 function pinSheet(rerender) {
   openForm({
-    title: 'الرمز السري للقسم', en: 'PIN Lock',
+    title: 'الرمز السري للقسم', en: 'القفل',
     fields: [
       { k: 'pin', label: 'الرمز الجديد (4–8 أرقام) — اتركه فارغًا لإزالة القفل', type: 'password', autocomplete: 'off', dir: 'ltr' },
       { k: 'password', label: 'كلمة مرور الحساب للتأكيد', type: 'password', required: true, dir: 'ltr' },
@@ -87,14 +87,14 @@ export default {
     const isOwner = me.letter === 'R' || c.enabled;
     if (!isOwner) {
       const pc = store.partner_cycle;
-      el.innerHTML = `<div class="page">${pageHead({ en: 'Cycle', ar: `دورة ${store.partner?.name || ''}`, back: '#/more' })}
-        ${pc ? `<div class="hero"><span class="en" style="color:var(--rose-ink)">Shared with you</span><div style="font-weight:600;font-size:18px;margin-top:8px">${pc.in_period ? 'في فترة الدورة الآن' : `الموعد المتوقع ${countdown(pc.days_to_next)}`}</div><div class="small" style="color:var(--ink2)">${pc.next ? fmtGreg(pc.next, { weekday: true }) : ''}</div><p class="small" style="margin:12px 0 0">كن لطيفًا ومتفهمًا 🤍</p></div><p class="tiny muted" style="margin-top:12px">${DISCLAIMER}</p>`
+      el.innerHTML = `<div class="page">${pageHead({ en: 'الدورة', ar: `دورة ${store.partner?.name || ''}`, back: '#/more' })}
+        ${pc ? `<div class="hero"><span class="en" style="color:var(--rose-ink)">تمت مشاركته معك</span><div style="font-weight:600;font-size:18px;margin-top:8px">${pc.in_period ? 'في فترة الدورة الآن' : `الموعد المتوقع ${countdown(pc.days_to_next)}`}</div><div class="small" style="color:var(--ink2)">${pc.next ? fmtGreg(pc.next, { weekday: true }) : ''}</div><p class="small" style="margin:12px 0 0">كن لطيفًا ومتفهمًا 🤍</p></div><p class="tiny muted" style="margin-top:12px">${DISCLAIMER}</p>`
           : `<div class="card soft center">${icon('lock', 'lg')}<p>هذا القسم خاص بـ${esc(store.partner?.name || 'الطرف الآخر')}، ولا تُعرض تفاصيله لغيرها.</p></div>`}</div>`;
       return;
     }
     if (!c.enabled) {
-      el.innerHTML = `<div class="page">${pageHead({ en: 'Cycle Tracker', ar: 'الدورة الشهرية', back: '#/more' })}
-        <div class="hero"><span class="en" style="color:var(--rose-ink);font-size:17px">Just for you</span><h2 style="margin:8px 0 6px;font-size:19px">مساحة خاصة لمتابعة دورتك</h2>
+      el.innerHTML = `<div class="page">${pageHead({ en: 'خاص بروان', ar: 'الدورة الشهرية', back: '#/more' })}
+        <div class="hero"><span class="en" style="color:var(--rose-ink);font-size:14px">خاص بك</span><h2 style="margin:8px 0 6px;font-size:19px">مساحة خاصة لمتابعة دورتك</h2>
         <p class="small" style="color:var(--ink2);margin:0">سجّلي مواعيدك وأعراضك واحصلي على توقعات تقريبية للدورة القادمة. البيانات خاصة بك فقط — لا يراها ${esc(store.partner?.name || 'أحد')} ولا تدخل في أي تقرير، ويمكنك قفل القسم برمز سري.</p>
         <button class="btn" style="margin-top:14px" data-enable>تفعيل القسم</button></div><p class="tiny muted" style="margin-top:12px">${DISCLAIMER}</p></div>`;
       el.querySelector('[data-enable]').onclick = async () => { try { await setCycle({ enabled: true }); rerender(); } catch (e) { toastErr(e); } };
@@ -102,7 +102,7 @@ export default {
     }
     if (full || st.entries === null && !st.locked) { el.innerHTML = '<div class="page"><div class="splash" style="min-height:40vh"><div class="logo" style="font-size:30px">E<i>&amp;</i>R</div></div></div>'; try { await load(); } catch (e) { el.innerHTML = `<div class="page"><div class="empty">${esc(e.message)}</div></div>`; return; } }
     if (st.locked) {
-      el.innerHTML = `<div class="page">${pageHead({ en: 'Locked', ar: 'القسم مقفل', back: '#/more' })}
+      el.innerHTML = `<div class="page">${pageHead({ en: 'مقفل', ar: 'القسم مقفل', back: '#/more' })}
         <div class="center" style="margin-top:30px">${icon('lock', 'lg')}<p class="muted">أدخلي الرمز السري</p><div class="pin-dots" id="dots">${[0, 1, 2, 3].map(() => '<i></i>').join('')}</div></div>
         <div class="pin-pad">${[1, 2, 3, 4, 5, 6, 7, 8, 9, '', 0, '⌫'].map((k) => k === '' ? '<span></span>' : `<button data-k="${k}">${k}</button>`).join('')}</div>
         <button class="btn block" data-go>فتح</button></div>`;
@@ -146,7 +146,7 @@ export default {
     for (let d = 1; d <= len; d++) { const ds = iso(y, mo, d); const cls = periodDays.has(ds) ? 'period' : predDays.has(ds) && ds >= t ? 'pred' : fertDays.has(ds) && ds >= t ? 'fert' : ''; grid += `<div class="cal-day ${cls} ${ds === t ? 'today' : ''}"><span class="g num">${d}</span></div>`; }
 
     el.innerHTML = `<div class="page">
-      ${pageHead({ en: 'Cycle Tracker', ar: 'الدورة الشهرية', back: '#/more', actions: `<button class="icon-btn" data-settings aria-label="الخصوصية">${icon('shield')}</button>` })}
+      ${pageHead({ en: 'خاص بروان', ar: 'الدورة الشهرية', back: '#/more', actions: `<button class="icon-btn" data-settings aria-label="الخصوصية">${icon('shield')}</button>` })}
       <div class="card center">
         <div class="ring"><svg viewBox="0 0 190 190"><circle cx="95" cy="95" r="${R}" stroke="var(--field)" stroke-width="12" fill="none"/><circle cx="95" cy="95" r="${R}" stroke="#C77A8A" stroke-width="12" fill="none" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - pct)}"/></svg>
           <div class="c">${s.last ? (s.inPeriod ? `<span class="small muted">اليوم</span><b class="num">${diffDays(s.last.start_date, t) + 1}</b><span class="small">من الدورة</span>` : `<span class="small muted">الدورة القادمة</span><b class="num">${s.daysToNext}</b><span class="small">${s.daysToNext === 1 ? 'يوم' : s.daysToNext <= 10 ? 'أيام' : 'يومًا'} تقريبًا</span>`) : '<span class="small muted">ابدئي بتسجيل<br>أول دورة</span>'}</div></div>
@@ -155,11 +155,11 @@ export default {
         <div class="row" style="justify-content:center;margin-top:14px;gap:8px">${open ? `<button class="btn rose" data-end="${open.id}">انتهت اليوم</button>` : '<button class="btn rose" data-start>بدأت اليوم</button>'}<button class="btn soft" data-new>${icon('plus', 'sm')} تسجيل</button></div>
       </div>
       <div class="stats3" style="margin-top:12px"><div class="stat"><b class="num">${s.avgCycle}</b><span>متوسط طول الدورة</span></div><div class="stat"><b class="num">${s.avgPeriod}</b><span>متوسط المدة</span></div><div class="stat"><b class="num">${s.count}</b><span>دورات مسجلة</span></div></div>
-      ${s.last ? `<div class="card" style="margin-top:12px"><div class="card-head"><h3>آخر دورة</h3><span class="en">Last cycle</span></div><dl class="kv"><dt>البداية</dt><dd>${fmtGreg(s.last.start_date, { weekday: true })}</dd><dt>النهاية</dt><dd>${s.last.end_date ? fmtGreg(s.last.end_date, { weekday: true }) : 'لم تُسجَّل بعد'}</dd>${s.last.end_date ? `<dt>المدة</dt><dd>${daysWord(diffDays(s.last.start_date, s.last.end_date) + 1)}</dd>` : ''}</dl></div>` : ''}
-      <div class="section-title"><h2>تقويم الدورة</h2><span class="en">Calendar</span></div>
+      ${s.last ? `<div class="card" style="margin-top:12px"><div class="card-head"><h3>آخر دورة</h3><span class="en">التفاصيل</span></div><dl class="kv"><dt>البداية</dt><dd>${fmtGreg(s.last.start_date, { weekday: true })}</dd><dt>النهاية</dt><dd>${s.last.end_date ? fmtGreg(s.last.end_date, { weekday: true }) : 'لم تُسجَّل بعد'}</dd>${s.last.end_date ? `<dt>المدة</dt><dd>${daysWord(diffDays(s.last.start_date, s.last.end_date) + 1)}</dd>` : ''}</dl></div>` : ''}
+      <div class="section-title"><h2>تقويم الدورة</h2><span class="en">شهريًا</span></div>
       <div class="card ccal" style="padding:12px"><div class="cal-head"><button class="icon-btn plain" data-m="-1">${icon('chevR')}</button><div class="t"><b>${GREG_MONTHS[mo - 1]} ${y}</b></div><button class="icon-btn plain" data-m="1">${icon('chevL')}</button></div><div class="cal-grid">${grid}</div>
       <div class="legend"><span><i style="background:#C77A8A"></i>الدورة</span><span><i style="background:color-mix(in srgb,#C77A8A 22%,transparent)"></i>متوقعة</span>${c.fertility ? '<span><i style="background:var(--sage-soft)"></i>خصوبة تقديرية</span>' : ''}</div></div>
-      <div class="section-title"><h2>السجل</h2><span class="en">History</span></div>
+      <div class="section-title"><h2>السجل</h2><span class="en">السابقة</span></div>
       <div class="card">${sorted.length ? sorted.map((e, i) => { const next = sorted[i - 1]; const L2 = next ? diffDays(e.start_date, next.start_date) : null; return `<div class="item" data-open="${e.id}" style="cursor:pointer"><span class="ic-box rose">${icon('drop')}</span><div class="grow"><div class="title">${fmtGreg(e.start_date)}${e.end_date ? ' – ' + fmtGreg(e.end_date, { year: false }) : ''}</div><div class="sub">${e.end_date ? daysWord(diffDays(e.start_date, e.end_date) + 1) : 'جارية'}${L2 ? ` · طول الدورة ${L2} يومًا` : ''}${e.pain ? ` · الألم ${e.pain}/10` : ''}${(e.symptoms || []).length ? ' · ' + e.symptoms.map((x) => L.symptoms[x]).filter(Boolean).join('، ') : ''}</div></div></div>`; }).join('') : '<div class="small muted">لا توجد سجلات بعد</div>'}</div>
       <p class="tiny muted" style="margin-top:14px">${icon('shield', 'sm')} ${DISCLAIMER} هذه البيانات خاصة بك ولا تُشارك مع أي جهة.</p>
     </div>`;

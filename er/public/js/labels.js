@@ -35,4 +35,10 @@ export const L = {
   symptoms: { cramps: 'آلام', headache: 'صداع', fatigue: 'إرهاق', mood: 'تغير المزاج', bloating: 'انتفاخ', back: 'آلام الظهر', acne: 'حبوب', cravings: 'رغبة بالأكل', nausea: 'غثيان', other: 'أعراض أخرى' },
   flow: { '': '—', light: 'خفيف', medium: 'متوسط', heavy: 'غزير' },
 };
+export const TZ_NAMES = { 'Asia/Riyadh': 'الرياض (السعودية)', 'Asia/Dubai': 'دبي (الإمارات)', 'Asia/Kuwait': 'الكويت', 'Asia/Qatar': 'الدوحة (قطر)', 'Asia/Bahrain': 'المنامة (البحرين)', 'Asia/Amman': 'عمّان (الأردن)', 'Africa/Cairo': 'القاهرة (مصر)', 'Europe/Istanbul': 'إسطنبول (تركيا)', 'Europe/London': 'لندن', 'Europe/Paris': 'باريس', 'America/New_York': 'نيويورك' };
+export const tzName = (z) => TZ_NAMES[z] || z;
+
+// The interface is fully Arabic: the former English sub-labels now point to the Arabic ones.
+for (const k of Object.keys(L)) if (k.endsWith('En')) L[k] = L[k.slice(0, -2)];
+
 export const opts = (o) => Object.entries(o).map(([v, l]) => ({ v, l }));
