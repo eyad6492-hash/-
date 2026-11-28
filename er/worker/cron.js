@@ -3,6 +3,7 @@ import { addDays, diffDays, fmtGreg, nextOccurrence, nowLocal, countdown, daysIn
 import { parseSettings, users } from './lib/session.js';
 import { notify } from './lib/notify.js';
 import { nowISO } from './lib/util.js';
+import { birthdaysOf, nextBirthday } from '../public/js/bday.js';
 
 /** The monthly anniversary date of `day` in month 'YYYY-MM' (31 → last day of shorter months). */
 export function monthlyDate(monthKey, day) { const [y, m] = monthKey.split('-').map(Number); return `${monthKey}-${String(Math.min(day, daysInMonth(y, m))).padStart(2, '0')}`; }
@@ -35,6 +36,9 @@ export async function runReminders(env, ctx) {
     q("SELECT * FROM tasks WHERE status != 'completed'"), q("SELECT * FROM trips WHERE status != 'done'"),
     q("SELECT * FROM plans WHERE status NOT IN ('completed', 'postponed')"), q("SELECT * FROM shopping WHERE done = 0 OR done IS NULL"),
   ]);
+  const bdRow = await env.DB.prepare("SELECT value FROM space_settings WHERE key = 'birthdays'").first();
+  const birthdays = birthdaysOf({ birthdays: bdRow ? JSON.parse(bdRow.value) : null });
+  const letters = (await env.DB.prepare('SELECT author, target FROM bday_letters').all()).results;
   let sent = 0;
   const send = async (u, key, msg) => { if (await once(env, `${key}:${u.id}`)) { await notify(ctx, u, msg); sent++; } };
 
@@ -82,6 +86,17 @@ export async function runReminders(env, ctx) {
       if (isDue(it.remind, it.remind_at, today)) await send(u, `shopping:${it.id}:${it.remind_at || today}`, { kind: 'shopping', group: 'shopping', title: `تذكير بالشراء: ${it.name}`, body: it.qty || '', link: '#/shopping' });
     }
 
+    // ---- أعياد ميلادنا: the partner's birthday countdown + the day itself; a letter waiting on my own birthday ----
+    if (daily) {
+      const partner = all.find((x) => x.id !== u.id);
+      if (partner) {
+        const nb = nextBirthday(birthdays[partner.letter].greg, today);
+        if ([7, 3, 1].includes(nb.days)) await send(u, `bday:${partner.id}:${nb.date}:${nb.days}`, { kind: 'birthday', group: 'dates', title: `باقي ${nb.days === 1 ? 'يوم واحد' : nb.days === 3 ? '3 أيام' : 'أسبوع'} على يوم ميلاد ${partner.name} 🎂`, body: `${partner.name} ${partner.letter === 'R' ? 'تكمل' : 'يكمل'} ${nb.age} سنة — ${fmtGreg(nb.date, { weekday: true })}`, link: '#/birthday' });
+        if (nb.days === 0) await send(u, `bday:${partner.id}:${nb.date}:0`, { kind: 'birthday', group: 'dates', title: `اليوم يوم ميلاد ${partner.name} ❤️🎂`, body: `${partner.letter === 'R' ? 'أكملت' : 'أكمل'} ${nb.age} سنة — يوم يستاهل احتفال`, link: '#/birthday' });
+        const mine = nextBirthday(birthdays[u.letter].greg, today);
+        if (mine.days === 0) await send(u, `bday-self:${mine.date}`, { kind: 'birthday', group: 'dates', title: 'كل عام وأنت بخير ❤️🎂', body: letters.some((l) => l.target === u.id) ? `${partner.name} ${partner.letter === 'R' ? 'تركت' : 'ترك'} لك رسالة خاصة — افتحها الآن` : 'يومك جميل مثلك', link: '#/birthday' });
+      }
+    }
     // ---- v3: monthly / yearly anniversary of the day we met ----
     if (since?.at && daily) {
       const sd = since.at.slice(0, 10), day = Number(sd.slice(8, 10));

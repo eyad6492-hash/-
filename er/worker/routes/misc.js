@@ -218,7 +218,7 @@ export const miscRoutes = {
       await logChange(ctx, 'space', '*', 'reset');
     } else if (b.scope === 'all') {
       if (b.confirm !== 'حذف') throw bad('اكتب كلمة «حذف» للتأكيد');
-      await ctx.env.DB.batch([...COL_NAMES.map((c) => ctx.env.DB.prepare(`DELETE FROM ${c}`)), ctx.env.DB.prepare('DELETE FROM notifications'), ctx.env.DB.prepare('DELETE FROM files WHERE id NOT IN (SELECT avatar_id FROM users WHERE avatar_id IS NOT NULL)'), ctx.env.DB.prepare('DELETE FROM reminder_log')]);
+      await ctx.env.DB.batch([...COL_NAMES.map((c) => ctx.env.DB.prepare(`DELETE FROM ${c}`)), ctx.env.DB.prepare('DELETE FROM notifications'), ctx.env.DB.prepare('DELETE FROM files WHERE id NOT IN (SELECT avatar_id FROM users WHERE avatar_id IS NOT NULL)'), ctx.env.DB.prepare('DELETE FROM reminder_log'), ctx.env.DB.prepare('DELETE FROM bday_letters')]);
       await logChange(ctx, 'space', '*', 'reset');
     } else throw bad('نطاق الحذف غير معروف');
     return json({ ok: true });

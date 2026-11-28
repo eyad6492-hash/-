@@ -217,6 +217,39 @@ async function main() {
     assert.ok(rem.date > t.slice(0, 10), 'weekly reminder should move to next week');
   });
 
+  console.log('\nأعياد ميلادنا');
+  await test('تواريخ الميلاد الافتراضية والرسائل', async () => {
+    const d = ok(await eyad('GET', '/api/bday'), 'b');
+    assert.deepEqual(d.birthdays.R, { greg: '2004-02-27', hijri: '1425-01-07' }); assert.deepEqual(d.birthdays.E, { greg: '2002-10-06', hijri: '1423-07-29' });
+    assert.equal(d.cfg.rules.length, 5);
+  });
+  await test('الرسالة المخفية: مقفلة على المستلم حتى يوم ميلاده ولا يستطيع تعديلها', async () => {
+    const r = ok(await eyad('PUT', '/api/bday/letter', { title: 'إلى روان', body: 'كل عام وأنتِ أجمل أيامي' }), 'w');
+    assert.ok(r.unlock_date.endsWith('-02-27'));
+    const forR = ok(await rawan('GET', '/api/bday'), 'r').for_me;
+    assert.equal(forR.exists, true); assert.equal(forR.unlocked, false); assert.equal(forR.body, undefined); assert.equal(forR.title, undefined);
+    assert.equal((await rawan('POST', '/api/bday/letter/open')).status, 423);
+    assert.equal(ok(await eyad('GET', '/api/bday'), 'e').mine.body, 'كل عام وأنتِ أجمل أيامي');
+    ok(await rawan('PUT', '/api/bday/letter', { body: 'رسالة روان لإياد' }), 'rw'); // Rawan can only write HER letter (to Eyad)
+    assert.equal(ok(await eyad('GET', '/api/bday'), 'e').mine.body, 'كل عام وأنتِ أجمل أيامي');
+  });
+  await test('في يوم الميلاد تُفتح الرسالة ويصل إشعار للكاتب', async () => {
+    const today = new Date(Date.now() + 3 * 3600000).toISOString().slice(0, 10);
+    ok(await eyad('PATCH', '/api/bday/config', { birthdays: { R: { greg: `2004-${today.slice(5)}` } } }), 'cfg');
+    const forR = ok(await rawan('GET', '/api/bday'), 'r').for_me; assert.equal(forR.unlocked, true); assert.equal(forR.body, 'كل عام وأنتِ أجمل أيامي');
+    const o = ok(await rawan('POST', '/api/bday/letter/open'), 'open'); assert.equal(o.from, 'إياد');
+    assert.ok(ok(await eyad('GET', '/api/notifications'), 'n').items.some((x) => x.kind === 'bday_letter'));
+    await fetch(BASE + '/__scheduled?cron=*/15+*+*+*+*');
+    ok(await eyad('PATCH', '/api/bday/config', { birthdays: { R: { greg: '2004-02-27' } } }), 'restore');
+  });
+  await test('التحقق من إعدادات الرسائل', async () => {
+    assert.equal((await eyad('PATCH', '/api/bday/config', { cfg: { rules: [{ from: 5, to: 2, text: 'x' }] } })).status, 400);
+    assert.equal((await eyad('PATCH', '/api/bday/config', { birthdays: { E: { greg: '2002/10/06' } } })).status, 400);
+    ok(await rawan('PATCH', '/api/bday/config', { cfg: { rules: [{ from: 0, to: null, text: 'رسالة جديدة' }], after_days: 2 } }), 'c');
+    const c = ok(await eyad('GET', '/api/bday'), 'g').cfg; assert.equal(c.rules[0].text, 'رسالة جديدة'); assert.equal(c.after_days, 2);
+    ok(await rawan('PATCH', '/api/bday/config', { cfg: { rules: [] } }), 'reset'); assert.equal(ok(await eyad('GET', '/api/bday'), 'g').cfg.rules.length, 5);
+  });
+
   console.log('\nالحساب والاستعادة');
   await test('استعادة كلمة المرور برمز الاستعادة', async () => { const c = client(); const d = ok(await c('POST', '/api/auth/recover', { email: 'eyad@example.com', code: recovery.toLowerCase(), password: 'new-password-1' }), 'rec'); assert.ok(d.recovery_code !== recovery); assert.equal((await eyad('GET', '/api/bootstrap')).status, 401); });
   await test('رابط إعادة تعيين من الطرف الآخر', async () => {

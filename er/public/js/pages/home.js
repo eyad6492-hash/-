@@ -10,6 +10,7 @@ import { get } from '../api.js';
 import { openMoodForm } from './mood.js';
 import { sinceCard } from './since.js';
 import { homeExtra } from './home-extra.js';
+import { birthdayCard, bindCard } from './birthday.js';
 
 let cycleCache = null;
 
@@ -99,6 +100,7 @@ export default {
       <div class="greet" style="margin:6px 2px 16px"><h1>${greetingFor(hour)}، ${esc(me.name)}</h1>
         <div class="date">${fmtGreg(t, { weekday: true })} · ${fmtHijri(t)}</div></div>
       ${sinceCard()}
+      ${birthdayCard()}
       ${homeExtra()}
       ${hero}
       ${ups.length ? `<div class="section-title"><h2>القادم</h2><span class="en">الأيام القادمة</span></div><div class="card upc">${ups.join('')}</div>` : ''}
@@ -127,6 +129,7 @@ export default {
       <div style="height:12px"></div>
     </div>`;
 
+    bindCard(el);
     el.onclick = async (e) => {
       const d = e.target.closest('[data-done]');
       if (d) { e.preventDefault(); d.classList.add('on'); try { await update('tasks', d.dataset.done, { status: 'completed' }); } catch (err) { d.classList.remove('on'); toastErr(err); } return; }

@@ -38,6 +38,7 @@ export default {
       <div class="card">${p ? row('users', `${esc(p.name)} (${p.letter})`, 'متصلان ✓ — كل التعديلات تظهر للطرفين مباشرة', avatar(p)) + btnRow('lock', `رابط إعادة تعيين كلمة مرور ${esc(p.name)}`, 'إذا نسي/نسيت كلمة المرور', 'resetlink')
         : btnRow('send', 'دعوة الطرف الآخر', 'أنشئ رابط دعوة خاص صالح لمدة 7 أيام — المساحة لشخصين فقط', 'invite', 'rose')}
         ${btnRow('heart', 'منذ أن عرفنا بعض ❤️', store.space.since ? 'تعديل تاريخ ووقت أول يوم، الذكرى والصورة' : 'حدّدوا تاريخ ووقت أول يوم تعرفتم فيه', 'since', 'rose')}
+        ${btnRow('cake', 'أعياد ميلادنا ❤️🎂', 'تواريخ الميلاد، رسائل العد التنازلي، رسالتك الخاصة المخفية', 'bday', 'rose')}
         ${row('wallet', 'العملة', '', `<button class="btn sm soft" data-act="currency">${esc(store.space.currency || 'ر.س')}</button>`)}</div>
 
       <div class="section-title"><h2>المظهر</h2><span class="en">الشكل</span></div>
@@ -93,6 +94,7 @@ export default {
         if (a === 'pushoff') { await disablePush(); push = await pushStatus(); return this.render(el); }
         if (a === 'pushtest') { const r = await post('/api/push/test'); return toast(r.sent ? 'تم إرسال إشعار تجريبي' : 'لم يتم الإرسال — أعد التفعيل', r.sent ? '' : 'err'); }
         if (a === 'cycle') { location.hash = '#/cycle'; return; }
+        if (a === 'bday') { location.hash = '#/birthday/admin'; return; }
         if (a === 'since') return (await import('./since.js')).editSince();
         if (a === 'password') return openForm({ title: 'تغيير كلمة المرور', fields: [{ k: 'current', label: 'كلمة المرور الحالية', type: 'password', required: true, dir: 'ltr', autocomplete: 'current-password' }, { k: 'password', label: 'كلمة المرور الجديدة (8+)', type: 'password', required: true, dir: 'ltr', autocomplete: 'new-password' }], onSubmit: async (v) => { await post('/api/auth/password', v); toast('تم تغيير كلمة المرور'); } });
         if (a === 'recovery') return openForm({ title: 'رمز استعادة جديد', fields: [{ type: 'info', html: 'سيتوقف الرمز القديم عن العمل.' }, { k: 'password', label: 'كلمة المرور', type: 'password', required: true, dir: 'ltr' }], onSubmit: async (v) => { const r = await post('/api/auth/recovery-code', v); setTimeout(() => linkSheet('رمز الاستعادة', 'احفظه جيدًا', 'احفظه في مكان آمن. لن يظهر مرة أخرى.', r.recovery_code, r.recovery_code), 260); } });

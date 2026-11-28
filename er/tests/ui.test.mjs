@@ -160,7 +160,24 @@ async function main() {
     await e.goto(BASE + '/#/more'); await e.waitForSelector('text=تواصلنا'); await shot(e, '28-more');
   });
 
-  const routes = ['s/wishes', 's/outings', 's/memories', 's/visited', 's/appointments', 's/daily_tasks', 's/cravings', 's/confessions', 's/upsets', 's/joys', 's/urgent', 's/requests', 's/commitments', 's/agreements', 's/needs', 's/reminders', 'anniv', 'since', '', 'calendar', 'tasks', 'plans', 'more', 'dates', 'mood', 'places', 'bucket', 'trips', 'honeymoon', 'shopping', 'expenses', 'notes', 'settings', 'notifications'];
+  await step('أعياد ميلادنا: كل طرف يرى ميلاد الآخر + رسالة مخفية + احتفال يوم الميلاد', async () => {
+    await e.goto(BASE + '/#/'); await e.waitForSelector('[data-bd-card]:has-text("يوم ميلاد روان")');
+    if (await e.$('[data-bd-card]:has-text("يوم ميلاد إياد")')) throw new Error('Eyad must not see his own birthday card');
+    await r.goto(BASE + '/#/'); await r.waitForSelector('[data-bd-card]:has-text("يوم ميلاد إياد")'); await shot(r, '30-bday-card-rawan');
+    await e.goto(BASE + '/#/birthday'); await e.waitForSelector('.bd-boxes'); await shot(e, '31-bday-page-eyad');
+    await e.goto(BASE + '/#/birthday/admin'); await e.click('[data-a=letter]'); await fill(e, 'title', 'إلى روان'); await e.fill('.sheet [data-k="body"]', 'كل عام وأنتِ أجمل أيامي.\nوجودك في حياتي أجمل هدية ❤️'); await save(e); await shot(e, '32-bday-admin');
+    await r.goto(BASE + '/#/birthday'); await r.waitForSelector('[data-letter-locked]', { timeout: 12000 });
+    await r.click('[data-letter-locked]'); await r.waitForSelector('text=رسالتك الخاصة تنتظرك في يوم ميلادك');
+    const today = await r.evaluate(() => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Riyadh' }).format(new Date()));
+    await r.evaluate((d) => fetch('/api/bday/config', { method: 'PATCH', headers: { 'content-type': 'application/json', 'x-requested-with': 'er' }, body: JSON.stringify({ birthdays: { R: { greg: '2004-' + d.slice(5) } } }) }), today);
+    await e.goto(BASE + '/#/'); await e.waitForSelector('.bd-card.party', { timeout: 12000 }); await e.waitForTimeout(1200); await shot(e, '33-bday-party-eyad');
+    await r.goto(BASE + '/'); await r.waitForSelector('.greet'); await r.goto(BASE + '/#/birthday'); await r.waitForSelector('[data-letter]', { timeout: 12000 }); await r.click('[data-letter]');
+    await r.waitForSelector('.bd-paper p'); await r.waitForTimeout(1800); await shot(r, '34-bday-letter');
+    await r.keyboard.press('Escape');
+    await r.evaluate(() => fetch('/api/bday/config', { method: 'PATCH', headers: { 'content-type': 'application/json', 'x-requested-with': 'er' }, body: JSON.stringify({ birthdays: { R: { greg: '2004-02-27' } } }) }));
+  });
+
+  const routes = ['birthday', 'birthday/admin', 's/wishes', 's/outings', 's/memories', 's/visited', 's/appointments', 's/daily_tasks', 's/cravings', 's/confessions', 's/upsets', 's/joys', 's/urgent', 's/requests', 's/commitments', 's/agreements', 's/needs', 's/reminders', 'anniv', 'since', '', 'calendar', 'tasks', 'plans', 'more', 'dates', 'mood', 'places', 'bucket', 'trips', 'honeymoon', 'shopping', 'expenses', 'notes', 'settings', 'notifications'];
   await step('كل الصفحات تعمل (إياد)', async () => {
     const english = [];
     for (const [i, rt] of routes.entries()) {

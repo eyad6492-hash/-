@@ -20,6 +20,7 @@ export const get = (p) => api('GET', p);
 export const post = (p, b = {}) => api('POST', p, b);
 export const patch = (p, b) => api('PATCH', p, b);
 export const del = (p) => api('DELETE', p);
+export const put = (p, b) => api('PUT', p, b);
 
 /** Resize an image in the browser (max 1600px, JPEG) so it fits the database row limit, then upload. */
 export async function uploadFile(file, { max = 1600, quality = 0.82, isPrivate = false } = {}) {
